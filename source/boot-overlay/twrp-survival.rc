@@ -1,0 +1,4 @@
+# Keep the explicitly installed custom recovery. Samsung's HZE1 vendor service
+# otherwise reconstructs stock recovery from boot on every normal Android boot.
+on early-init
+    stop vendor_flash_recovery

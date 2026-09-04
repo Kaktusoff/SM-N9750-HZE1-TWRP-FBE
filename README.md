@@ -77,3 +77,11 @@ and are not guaranteed by this project.
 - [TeamWin Recovery Project](https://github.com/TeamWin/android_bootable_recovery)
 - [Magisk](https://github.com/topjohnwu/Magisk)
 - the upstream projects linked in [POST_INSTALL_ROOT.md](POST_INSTALL_ROOT.md)
+
+## Support the project
+
+- Visa T-Bank: `4377 7278 0483 9954`
+- USDT on TON: `UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R`
+
+Verify the TON network and the complete address before sending. See
+[DONATE.md](DONATE.md).

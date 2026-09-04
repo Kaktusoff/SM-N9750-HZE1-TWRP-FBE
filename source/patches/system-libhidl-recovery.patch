@@ -1,0 +1,12 @@
+diff --git a/libhidlmemory/Android.bp b/libhidlmemory/Android.bp
+index fc5770c..22f979e 100644
+--- a/libhidlmemory/Android.bp
++++ b/libhidlmemory/Android.bp
+@@ -25,6 +25,7 @@ cc_library {
+     name: "libhidlmemory",
+     vendor_available: true,
+     product_available: true,
++    recovery_available: true,
+     // Host support is needed for testing only
+     host_supported: true,
+     // TODO(b/153609531): remove when no longer needed.

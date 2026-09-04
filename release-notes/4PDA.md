@@ -18,6 +18,13 @@ RECOVERY.
 [/LIST]
 [/SPOILER]
 
+[SPOILER="Поддержать проект"]
+[B]Visa T-Bank:[/B] 4377 7278 0483 9954
+[B]USDT в сети TON:[/B] UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R
+
+Перед отправкой USDT обязательно проверьте сеть TON и весь адрес посимвольно.
+[/SPOILER]
+
 [SPOILER="Что исправлено"]
 Стоковая HZE1 использует два разных Gatekeeper-домена. Первый HAT открывает
 synthetic-password blob. После этого recovery должен отдельно вывести
@@ -62,4 +69,3 @@ ReVanced Extended 9.15.51.
 которым нужен root (например VPN Hotspot), нельзя добавлять в blacklist Shamiko,
 иначе они будут писать Root is missing при выданном разрешении.
 [/SPOILER]
-

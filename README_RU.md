@@ -55,3 +55,11 @@ Knox. Samsung Pay, Secure Folder и другие Knox-функции могут 
 Сторонние модули и модифицированные Google APK не включены в релиз. Они
 устанавливаются только из официальных источников по
 [POST_INSTALL_ROOT_RU.md](POST_INSTALL_ROOT_RU.md).
+
+## Поддержать проект
+
+- Visa T-Bank: `4377 7278 0483 9954`
+- USDT в сети TON: `UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R`
+
+Перед отправкой USDT проверьте сеть `TON` и весь адрес посимвольно. Подробнее:
+[DONATE.md](DONATE.md).

@@ -65,3 +65,12 @@ unlock wipes data and permanently trips Knox.
 Поддерживается только `SM-N9750` / `d2q` / `N9750ZSU6HZE1`. Не прошивайте на
 `SM-N975F`, `SM-N976B`, другую модель или другую базовую прошивку. Разблокировка
 загрузчика стирает данные и необратимо сжигает Knox.
+
+## Support / Поддержать проект
+
+- Visa T-Bank: `4377 7278 0483 9954`
+- USDT on TON / в сети TON:
+  `UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R`
+
+Verify the TON network and the complete address before sending. Перед отправкой
+проверьте сеть `TON` и весь адрес посимвольно.

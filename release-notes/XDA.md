@@ -61,3 +61,9 @@ Integrity Box v41 + Tricky Store v1.4.1, Shamiko v1.2.5, Vector v2.2 + HMA
 9.15.51. These third-party files are not redistributed; upstream links and
 configuration notes are in POST_INSTALL_ROOT.md.
 
+[SIZE=5][B]Support the project[/B][/SIZE]
+
+[B]Visa T-Bank:[/B] 4377 7278 0483 9954
+[B]USDT on TON:[/B] UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R
+
+Please verify the TON network and the complete address before sending.

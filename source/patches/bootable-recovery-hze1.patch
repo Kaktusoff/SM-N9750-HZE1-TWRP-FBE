@@ -1,0 +1,88 @@
+diff --git a/Android.mk b/Android.mk
+index 383adca..aeb0708 100644
+--- a/Android.mk
++++ b/Android.mk
+@@ -343,6 +343,7 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
+         android.hardware.oemlock@1.0 libf2fs_sparseblock libbinder libbinder_ndk \
+         libandroidicu.recovery \
+         android.hardware.gatekeeper@1.0 \
++        android.hardware.keymaster@4.0 \
+         android.hardware.weaver@1.0 \
+         android.frameworks.stats@1.0 \
+         android.security.maintenance-ndk_platform \
+@@ -351,6 +352,7 @@ ifeq ($(TW_INCLUDE_CRYPTO), true)
+         liblog \
+         libsqlite.recovery \
+         libkeystoreinfo.recovery \
++        libkeymaster4support \
+         libgatekeeper_aidl
+ 
+     LOCAL_STATIC_LIBRARIES += libkeymint_support
+@@ -556,7 +558,6 @@ TWRP_REQUIRED_MODULES += \
+     vold_prepare_subdirs \
+     task_recovery_profiles.json \
+     fscryptpolicyget.recovery \
+-    keystore_auth \
+     keystore2 \
+     android.system.keystore2-service.xml \
+     keystore2.rc \
+diff --git a/partition.cpp b/partition.cpp
+index 184cb16..155864b 100755
+--- a/partition.cpp
++++ b/partition.cpp
+@@ -778,11 +778,21 @@ void TWPartition::Set_FBE_Status() {
+ }
+ 
+ bool TWPartition::Decrypt_FBE_DE() {
+-	if (TWFunc::Path_Exists("/data/unencrypted/key/version")) {
++	std::string key_storage = android::base::GetProperty("ro.twrp.fbe.key_storage", "/data");
++	std::string key_refuge = android::base::GetProperty("ro.twrp.fbe.key_refuge", "");
++	if (key_storage.empty())
++		key_storage = "/data";
++	if (key_storage != "/data") {
++		PartitionManager.Mount_By_Path(key_storage, false);
++		if (!key_refuge.empty())
++			PartitionManager.Mount_By_Path(key_refuge, false);
++	}
++	const std::string fbe_version = key_storage + "/unencrypted/key/version";
++	if (TWFunc::Path_Exists(fbe_version)) {
+ 		DataManager::SetValue(TW_IS_FBE, 1);
+ 		PartitionManager.Set_Crypto_State();
+ 		PartitionManager.Set_Crypto_Type("file");
+-		LOGINFO("File Based Encryption is present\n");
++		LOGINFO("File Based Encryption is present; key storage: %s\n", key_storage.c_str());
+ #ifdef TW_INCLUDE_FBE
+ 	Is_FBE = true;
+ 	ExcludeAll(Mount_Point + "/convert_fbe");
+@@ -1272,6 +1282,7 @@ void TWPartition::Setup_Data_Media() {
+ 			Make_Dir("/sdcard", false);
+ 			Symlink_Mount_Point = "/sdcard";
+ 		}
++		bool was_already_mounted = Is_Mounted();
+ 		#ifdef TW_PREPARE_DATA_MEDIA_EARLY
+ 		if (Mount(false) && TWFunc::Path_Exists(Mount_Point + "/media/0")) {
+ 		#else
+@@ -1284,7 +1295,10 @@ void TWPartition::Setup_Data_Media() {
+ 			#ifndef TW_INCLUDE_CRYPTO
+ 				DataManager::SetValue("tw_settings_path", TW_STORAGE_PATH);
+ 			#endif
+-			UnMount(true);
++			if (!was_already_mounted)
++				UnMount(true);
++			else
++				LOGINFO("Preserving existing '%s' mount after data/media setup.\n", Mount_Point.c_str());
+ 		}
+ 		DataManager::SetValue("tw_has_internal", 1);
+ 		DataManager::SetValue("tw_has_data_media", 1);
+diff --git a/prebuilt/Android.mk b/prebuilt/Android.mk
+index 3197ec1..646ca2d 100755
+--- a/prebuilt/Android.mk
++++ b/prebuilt/Android.mk
+@@ -84,7 +84,6 @@ RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libbinder_ndk.so
+ RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libchrome.so
+ RECOVERY_LIBRARY_SOURCE_FILES += $(TARGET_OUT_SHARED_LIBRARIES)/libevent.so
+ RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/keystore
+-RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/keystore_auth
+ RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/keystore_cli_v2
+ RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/hwservicemanager
+ RECOVERY_BINARY_SOURCE_FILES += $(TARGET_OUT_EXECUTABLES)/servicemanager

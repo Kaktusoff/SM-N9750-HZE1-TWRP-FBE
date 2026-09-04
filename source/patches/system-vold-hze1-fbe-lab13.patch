@@ -1,0 +1,971 @@
+diff --git a/Android.bp b/Android.bp
+index 376157b..a91585d 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -176,6 +176,7 @@ cc_library_static {
+         "android.hardware.gatekeeper@1.0",
+         "android.hardware.health.storage@1.0",
+         "android.hardware.health.storage-V1-ndk_platform",
++        "android.hardware.keymaster@4.0",
+         "android.hardware.keymaster@4.1",
+         "android.hardware.security.keymint-V1-ndk_platform",
+         "android.hardware.weaver@1.0",
+diff --git a/Decrypt.cpp b/Decrypt.cpp
+index d9f034b..8040344 100755
+--- a/Decrypt.cpp
++++ b/Decrypt.cpp
+@@ -83,6 +83,7 @@ extern "C" {
+ #include "HashPassword.h"
+ #include "KeystoreInfo.hpp"
+ #include "KeyStorage.h"
++#include "Utils.h"
+ #include "android/os/IVold.h"
+ 
+ namespace apc = ::aidl::android::security::apc;
+@@ -440,9 +441,11 @@ namespace keystore {
+ 	* https://android.googlesource.com/platform/frameworks/base/+/android-8.0.0_r23/services/core/java/com/android/server/locksettings/SyntheticPasswordManager.java#867
+ 	* returning an empty string indicates an error */
+ 	std::string unwrapSyntheticPasswordBlob(const std::string& spblob_path, const std::string& handle_str, const userid_t user_id,
+-		const void* application_id, const size_t application_id_size, uint32_t auth_token_len) {
++		const void* application_id, const size_t application_id_size, uint32_t auth_token_len,
++		std::string* synthetic_password_gatekeeper_password) {
+ 		printf("Attempting to unwrap synthetic password blob\n");
+ 		std::string disk_decryption_secret_key = "";
++		synthetic_password_gatekeeper_password->clear();
+ 
+ 		android::ProcessState::self()->startThreadPool();
+ 
+@@ -572,14 +575,37 @@ namespace keystore {
+ 			free(keystore_result);
+ 			int secret_key_real_size = actual_size - 16;
+ 			// printf("secret key:  "); output_hex((const unsigned char*)secret_key, secret_key_real_size); printf("\n");
+-			// The payload data from the keystore update is further personalized at https://android.googlesource.com/platform/frameworks/base/+/android-8.0.0_r23/services/core/java/com/android/server/locksettings/SyntheticPasswordManager.java#153
+-			// We now have the disk decryption key!
++			// Stock Android uses two different Gatekeeper domains in this flow.  The HAT from
++			// verifying the user's credential unlocks this synthetic-password blob.  After the
++			// blob is open, derive the synthetic-password Gatekeeper credential and verify the
++			// per-user SP handle to obtain the separate HAT that authorizes the CE key.
+ 			if (*synthetic_password_version == SYNTHETIC_PASSWORD_VERSION_V3) {
+-				// V3 uses SP800 instead of SHA512
++				// V3 uses SP800-108.  PersonalizedHashSP800 returns hex because vold needs
++				// the FBE secret in that form, but Gatekeeper consumes the raw 32-byte KDF output.
++				std::string sp_gk_password_hex = PersonalizedHashSP800(
++					PERSONALIZATION_SP_GK_AUTH, PERSONALISATION_CONTEXT,
++					(const char*)secret_key, secret_key_real_size);
++				if (android::vold::HexToStr(sp_gk_password_hex,
++						*synthetic_password_gatekeeper_password) != android::OK) {
++					printf("failed to decode the v3 synthetic-password Gatekeeper credential\n");
++					free(secret_key);
++					return "";
++				}
+ 				disk_decryption_secret_key = PersonalizedHashSP800(PERSONALIZATION_FBE_KEY, PERSONALISATION_CONTEXT, (const char*)secret_key, secret_key_real_size);
+ 			} else {
++				void* sp_gk_password = PersonalizedHashBinary(
++					PERSONALIZATION_SP_GK_AUTH, (const char*)secret_key, secret_key_real_size);
++				if (!sp_gk_password) {
++					printf("failed to derive the v1/v2 synthetic-password Gatekeeper credential\n");
++					free(secret_key);
++					return "";
++				}
++				synthetic_password_gatekeeper_password->assign(
++					reinterpret_cast<const char*>(sp_gk_password), SHA512_DIGEST_LENGTH);
++				free(sp_gk_password);
+ 				disk_decryption_secret_key = PersonalizedHash(PERSONALIZATION_FBE_KEY, (const char*)secret_key, secret_key_real_size);
+ 			}
++			printf("Derived separate synthetic-password Gatekeeper credential for CE authorization\n");
+ 			// printf("disk_decryption_secret_key: '%s'\n", disk_decryption_secret_key.c_str());
+ 			free(secret_key);
+ 			return disk_decryption_secret_key;
+@@ -587,6 +613,79 @@ namespace keystore {
+ 		return disk_decryption_secret_key;
+ 	}
+ }
++
++static bool Get_Synthetic_Password_HAT(const userid_t user_id,
++		const std::string& spblob_path, const std::string& gatekeeper_password,
++		std::string* token_hex) {
++	static constexpr char kSyntheticPasswordHandle[] = "0000000000000000";
++	std::string sp_handle;
++	if (!Get_Spblob_Data(spblob_path, kSyntheticPasswordHandle, ".handle",
++			"synthetic-password handle", &sp_handle) || sp_handle.empty()) {
++		printf("failed to read the per-user synthetic-password Gatekeeper handle\n");
++		return false;
++	}
++	if (gatekeeper_password.empty()) {
++		printf("synthetic-password Gatekeeper credential is empty\n");
++		return false;
++	}
++
++	auto gk_device = ::android::hardware::gatekeeper::V1_0::IGatekeeper::getService();
++	if (gk_device == nullptr) {
++		printf("failed to get Gatekeeper service for synthetic-password verification\n");
++		return false;
++	}
++
++	android::hardware::hidl_vec<uint8_t> handle_hidl;
++	handle_hidl.setToExternal(reinterpret_cast<uint8_t*>(&sp_handle[0]), sp_handle.size());
++	android::hardware::hidl_vec<uint8_t> password_hidl;
++	password_hidl.setToExternal(
++			reinterpret_cast<uint8_t*>(const_cast<char*>(gatekeeper_password.data())),
++			gatekeeper_password.size());
++
++	bool callback_called = false;
++	bool verified = false;
++	int32_t gatekeeper_status = -1;
++	std::string raw_hat;
++	auto hw_ret = gk_device->verify(
++			user_id, 0 /* challenge */, handle_hidl, password_hidl,
++			[&](const android::hardware::gatekeeper::V1_0::GatekeeperResponse& rsp) {
++				callback_called = true;
++				gatekeeper_status = static_cast<int32_t>(rsp.code);
++				if (rsp.code >= android::hardware::gatekeeper::V1_0::GatekeeperStatusCode::STATUS_OK &&
++						rsp.data.size() == sizeof(hw_auth_token_t)) {
++					raw_hat.assign(reinterpret_cast<const char*>(rsp.data.data()), rsp.data.size());
++					verified = true;
++				}
++			});
++	if (!hw_ret.isOk() || !callback_called) {
++		printf("synthetic-password Gatekeeper verification transaction failed\n");
++		return false;
++	}
++	if (!verified) {
++		printf("synthetic-password Gatekeeper verification failed, status %d, HAT length %zu\n",
++				gatekeeper_status, raw_hat.size());
++		return false;
++	}
++
++	// Both structures store the Secure User ID in native byte order.  Validate the SID
++	// relationship without logging the identifier itself.
++	constexpr size_t kPasswordHandleSidOffset = 1;
++	constexpr size_t kHatSidOffset = 1 + sizeof(uint64_t);
++	if (sp_handle.size() < kPasswordHandleSidOffset + sizeof(uint64_t) ||
++			memcmp(sp_handle.data() + kPasswordHandleSidOffset,
++				   raw_hat.data() + kHatSidOffset, sizeof(uint64_t)) != 0) {
++		printf("synthetic-password HAT Secure User ID does not match its Gatekeeper handle\n");
++		return false;
++	}
++
++	if (android::vold::StrToHex(raw_hat, *token_hex) != android::OK) {
++		printf("failed to encode the synthetic-password Gatekeeper HAT for vold\n");
++		return false;
++	}
++	printf("Primary-user synthetic-password HAT captured and SID-validated: %zu bytes\n",
++			raw_hat.size());
++	return true;
++}
+ // /* C++ replacement for
+ //  * https://android.googlesource.com/platform/frameworks/base/+/android-8.0.0_r23/services/core/java/com/android/server/locksettings/SyntheticPasswordManager.java#992
+ //  * called here
+@@ -621,10 +720,11 @@ bool Free_Return(bool retval, void* weaver_key, password_data_struct* pwd) {
+ 	return retval;
+ }
+ 
+-bool Decrypt_CE_storage(const userid_t user_id, int token, const std::string& secret) {
++bool Decrypt_CE_storage(const userid_t user_id, int serial, const std::string& token,
++                        const std::string& secret) {
+ 	printf("Attempting to unlock user storage\n");
+ 	int flags = android::os::IVold::STORAGE_FLAG_CE;
+-	if (!fscrypt_unlock_user_key(user_id, token, secret)) {
++	if (!fscrypt_unlock_user_key(user_id, serial, token, secret)) {
+ 		printf("fscrypt_unlock_user_key returned fail\n");
+ 		return false;
+ 	}
+@@ -651,7 +751,7 @@ bool Decrypt_User_Synth_Pass(const userid_t user_id, const std::string& Password
+ 	char application_id[PASSWORD_TOKEN_SIZE + SHA512_DIGEST_LENGTH];
+ 	uint32_t auth_token_len = 0;
+ 	std::string secret; // this will be the disk decryption key that is sent to vold
+-	int token = 0; // there is no token used for this kind of decrypt, key escrow is handled by weaver
++	std::string token = "!";
+ 	char spblob_path_char[PATH_MAX];
+ 	sprintf(spblob_path_char, "/data/system_de/%d/spblob/", user_id);
+ 	std::string spblob_path = spblob_path_char;
+@@ -779,7 +879,8 @@ bool Decrypt_User_Synth_Pass(const userid_t user_id, const std::string& Password
+ 									// []
+ 									(const android::hardware::gatekeeper::V1_0::GatekeeperResponse &rsp) {
+ 										// ret = static_cast<int>(rsp.code); // propagate errors
+-										if (rsp.code >= android::hardware::gatekeeper::V1_0::GatekeeperStatusCode::STATUS_OK) {
++										if (rsp.code >= android::hardware::gatekeeper::V1_0::GatekeeperStatusCode::STATUS_OK &&
++											rsp.data.size() == sizeof(hw_auth_token_t)) {
+ 											gkResponse = GKResponse::ok({rsp.data.begin(), rsp.data.end()});
+ 											const hw_auth_token_t* hwAuthToken =
+ 												reinterpret_cast<const hw_auth_token_t*>(gkResponse.payload().data());
+@@ -807,19 +908,46 @@ bool Decrypt_User_Synth_Pass(const userid_t user_id, const std::string& Password
+ 				printf("gatekeeper verification failed\n");
+ 				return Free_Return(retval, weaver_key, &pwd);
+ 			}
++			const auto& gatekeeper_hat = gkResponse.payload();
++			if (gatekeeper_hat.size() != sizeof(hw_auth_token_t)) {
++				printf("gatekeeper verification returned invalid HAT length: %zu\n",
++					   gatekeeper_hat.size());
++				return Free_Return(retval, weaver_key, &pwd);
++			}
++			auth_token_len = gatekeeper_hat.size();
++			const std::string raw_hat(reinterpret_cast<const char*>(gatekeeper_hat.data()),
++								  gatekeeper_hat.size());
++			if (android::vold::StrToHex(raw_hat, token) != android::OK) {
++				printf("failed to encode Gatekeeper HAT for vold\n");
++				return Free_Return(retval, weaver_key, &pwd);
++			}
++			printf("Gatekeeper HAT captured for vold: %u bytes\n", auth_token_len);
+ 		}
+ 	}
+ 	// Now we will handle https://android.googlesource.com/platform/frameworks/base/+/android-8.0.0_r23/services/core/java/com/android/server/locksettings/SyntheticPasswordManager.java#816
+ 	// Plus we will include the last bit that computes the disk decrypt key found in:
+ 	// https://android.googlesource.com/platform/frameworks/base/+/android-8.0.0_r23/services/core/java/com/android/server/locksettings/SyntheticPasswordManager.java#153
+-	secret = android::keystore::unwrapSyntheticPasswordBlob(spblob_path, handle_str, user_id, (const void*)&application_id[0], 
+-		PASSWORD_TOKEN_SIZE + SHA512_DIGEST_LENGTH, auth_token_len);
++	std::string synthetic_password_gatekeeper_password;
++	secret = android::keystore::unwrapSyntheticPasswordBlob(spblob_path, handle_str, user_id,
++		(const void*)&application_id[0], PASSWORD_TOKEN_SIZE + SHA512_DIGEST_LENGTH,
++		auth_token_len, &synthetic_password_gatekeeper_password);
+ 	if (!secret.size()) {
+ 		printf("failed to unwrapSyntheticPasswordBlob\n");
+ 		return Free_Return(retval, weaver_key, &pwd);
+ 	}
++	if (Password != "!") {
++		// The first HAT is scoped to fakeUid(user_id) and only authorizes the SP blob.
++		// CE storage is bound to the real user's synthetic-password SID, so mirror
++		// SyntheticPasswordManager.verifyChallenge() and replace it with a second HAT.
++		if (!Get_Synthetic_Password_HAT(user_id, spblob_path,
++				synthetic_password_gatekeeper_password, &token)) {
++			printf("failed to obtain the primary-user synthetic-password HAT\n");
++			return Free_Return(retval, weaver_key, &pwd);
++		}
++	}
++	synthetic_password_gatekeeper_password.clear();
+ 
+-	if (!Decrypt_CE_storage(user_id, token, secret)) {
++	if (!Decrypt_CE_storage(user_id, 0, token, secret)) {
+ 		return Free_Return(retval, weaver_key, &pwd);
+ 	}
+ 
+@@ -900,7 +1028,7 @@ extern "C" bool Decrypt_User(const userid_t user_id, const std::string& Password
+ 	}
+ 
+ 	if (Default_Password) {
+-		if (!Decrypt_CE_storage(user_id, 0, "!")) {
++		if (!Decrypt_CE_storage(user_id, 0, "!", "!")) {
+ 			return Decrypt_User_Synth_Pass(user_id, Password);
+ 		}
+ 		return true;
+@@ -960,7 +1088,7 @@ extern "C" bool Decrypt_User(const userid_t user_id, const std::string& Password
+ 	}
+ 	// The secret is "Android FBE credential hash" plus appended 0x00 to reach 128 bytes then append the user's password then feed that to sha512sum
+ 	std::string secret = HashPassword(Password);
+-	if (!Decrypt_CE_storage(user_id, 0, secret)) {
++	if (!Decrypt_CE_storage(user_id, 0, std::string(token_hex), secret)) {
+ 		return false;
+ 	}
+ 	return true;
+diff --git a/FsCrypt.cpp b/FsCrypt.cpp
+index 7505e56..b0f31cb 100644
+--- a/FsCrypt.cpp
++++ b/FsCrypt.cpp
+@@ -84,16 +84,49 @@ using namespace android::dm;
+ 
+ namespace {
+ 
+-const std::string device_key_dir = std::string() + DATA_MNT_POINT + fscrypt_unencrypted_folder;
+-const std::string device_key_path = device_key_dir + "/key";
+-const std::string device_key_temp = device_key_dir + "/temp";
+-
+-const std::string user_key_dir = std::string() + DATA_MNT_POINT + "/misc/vold/user_keys";
+-const std::string user_key_temp = user_key_dir + "/temp";
+ const std::string prepare_subdirs_path = "/system/bin/vold_prepare_subdirs";
+ 
+-const std::string systemwide_volume_key_dir =
+-    std::string() + DATA_MNT_POINT + "/misc/vold/volume_keys";
++const std::string& key_storage_mountpoint() {
++    static const std::string path = [] {
++        auto value = android::base::GetProperty("ro.twrp.fbe.key_storage", DATA_MNT_POINT);
++        return value.empty() ? std::string(DATA_MNT_POINT) : value;
++    }();
++    return path;
++}
++
++const std::string& key_refuge_mountpoint() {
++    static const std::string path =
++        android::base::GetProperty("ro.twrp.fbe.key_refuge", "");
++    return path;
++}
++
++bool uses_external_key_storage() {
++    return key_storage_mountpoint() != DATA_MNT_POINT;
++}
++
++std::string device_key_dir() {
++    return key_storage_mountpoint() + fscrypt_unencrypted_folder;
++}
++
++std::string device_key_path() {
++    return device_key_dir() + "/key";
++}
++
++std::string device_key_temp() {
++    return device_key_dir() + "/temp";
++}
++
++std::string user_key_dir() {
++    return key_storage_mountpoint() + "/misc/vold/user_keys";
++}
++
++std::string user_key_temp() {
++    return user_key_dir() + "/temp";
++}
++
++std::string systemwide_volume_key_dir() {
++    return key_storage_mountpoint() + "/misc/vold/volume_keys";
++}
+ 
+ // Some users are ephemeral, don't try to wipe their keys from disk
+ std::set<userid_t> s_ephemeral_users;
+@@ -120,11 +153,11 @@ static const char* escape_empty(const std::string& value) {
+ }
+ 
+ static std::string get_de_key_path(userid_t user_id) {
+-    return StringPrintf("%s/de/%d", user_key_dir.c_str(), user_id);
++    return StringPrintf("%s/de/%d", user_key_dir().c_str(), user_id);
+ }
+ 
+ static std::string get_ce_key_directory_path(userid_t user_id) {
+-    return StringPrintf("%s/ce/%d", user_key_dir.c_str(), user_id);
++    return StringPrintf("%s/ce/%d", user_key_dir().c_str(), user_id);
+ }
+ 
+ // Returns the keys newest first
+@@ -206,7 +239,11 @@ static bool read_and_fixate_user_ce_key(userid_t user_id,
+         LOG(INFO) << "Trying user CE key " << ce_key_path;
+         if (retrieveKey(ce_key_path, auth, ce_key)) {
+             LOG(DEBUG) << "Successfully retrieved key";
+-            fixate_user_ce_key(directory_path, ce_key_path, paths);
++            if (!uses_external_key_storage()) {
++                fixate_user_ce_key(directory_path, ce_key_path, paths);
++            } else {
++                LOG(INFO) << "Leaving external recovery key storage unchanged";
++            }
+             return true;
+         }
+     }
+@@ -237,7 +274,13 @@ static bool IsEmmcStorage(const std::string& blk_device) {
+ // Retrieve the options to use for encryption policies on the /data filesystem.
+ static bool get_data_file_encryption_options(EncryptionOptions* options) {
+     if (fstab_default.empty()) {
+-        if (!ReadDefaultFstab(&fstab_default)) {
++        constexpr const char* recovery_additional_fstab = "/etc/additional.fstab";
++        if (access(recovery_additional_fstab, R_OK) == 0) {
++            if (!android::fs_mgr::ReadFstabFromFile(recovery_additional_fstab, &fstab_default)) {
++                PLOG(ERROR) << "Failed to open recovery additional fstab";
++                return false;
++            }
++        } else if (!ReadDefaultFstab(&fstab_default)) {
+             PLOG(ERROR) << "Failed to open default fstab";
+             return false;
+         }
+@@ -355,12 +398,12 @@ static bool create_and_install_user_keys(userid_t user_id, bool create_ephemeral
+         auto const paths = get_ce_key_paths(directory_path);
+         std::string ce_key_path;
+         if (!get_ce_key_new_path(directory_path, paths, &ce_key_path)) return false;
+-        if (!android::vold::storeKeyAtomically(ce_key_path, user_key_temp, kEmptyAuthentication,
++        if (!android::vold::storeKeyAtomically(ce_key_path, user_key_temp(), kEmptyAuthentication,
+                                                ce_key))
+             return false;
+         fixate_user_ce_key(directory_path, ce_key_path, paths);
+         // Write DE key second; once this is written, all is good.
+-        if (!android::vold::storeKeyAtomically(get_de_key_path(user_id), user_key_temp,
++        if (!android::vold::storeKeyAtomically(get_de_key_path(user_id), user_key_temp(),
+                                                kEmptyAuthentication, de_key))
+             return false;
+     }
+@@ -395,7 +438,7 @@ static bool is_numeric(const char* name) {
+ static bool load_all_de_keys() {
+     EncryptionOptions options;
+     if (!get_data_file_encryption_options(&options)) return false;
+-    auto de_dir = user_key_dir + "/de";
++    auto de_dir = user_key_dir() + "/de";
+     auto dirp = std::unique_ptr<DIR, int (*)(DIR*)>(opendir(de_dir.c_str()), closedir);
+     if (!dirp) {
+         PLOG(ERROR) << "Unable to read de key directory";
+@@ -457,9 +500,13 @@ bool fscrypt_initialize_systemwide_keys() {
+ 
+     KeyBuffer device_key;
+ install:
+-    if (!retrieveOrGenerateKey(device_key_path, device_key_temp, kEmptyAuthentication,
+-                               makeGen(options), &device_key))
++    if (uses_external_key_storage()) {
++        LOG(INFO) << "Reading recovery device key from " << device_key_path();
++        if (!retrieveKey(device_key_path(), kEmptyAuthentication, &device_key)) return false;
++    } else if (!retrieveOrGenerateKey(device_key_path(), device_key_temp(), kEmptyAuthentication,
++                                      makeGen(options), &device_key)) {
+         return false;
++    }
+ 
+     EncryptionPolicy device_policy;
+     if (!install_storage_key(DATA_MNT_POINT, options, device_key, &device_policy)) {
+@@ -473,27 +520,48 @@ install:
+         return false;
+     }
+ 
++    if (uses_external_key_storage()) {
++        EncryptionPolicy key_storage_policy;
++        if (!install_storage_key(key_storage_mountpoint(), options, device_key,
++                                 &key_storage_policy)) {
++            LOG(ERROR) << "Failed to install device key on " << key_storage_mountpoint();
++            return false;
++        }
++        if (!key_refuge_mountpoint().empty()) {
++            EncryptionPolicy key_refuge_policy;
++            if (!install_storage_key(key_refuge_mountpoint(), options, device_key,
++                                     &key_refuge_policy)) {
++                LOG(ERROR) << "Failed to install device key on " << key_refuge_mountpoint();
++                return false;
++            }
++        }
++    }
++
+     std::string options_string;
+     if (!OptionsToString(device_policy.options, &options_string)) {
+         LOG(ERROR) << "Unable to serialize options";
+         return false;
+     }
+-    std::string options_filename = std::string(DATA_MNT_POINT) + fscrypt_key_mode;
+-    if (!android::vold::writeStringToFile(options_string, options_filename)) return false;
+-
+-    std::string ref_filename = std::string(DATA_MNT_POINT) + fscrypt_key_ref;
+     de_key_raw_ref = device_policy.key_raw_ref;
+-    if (!android::vold::writeStringToFile(device_policy.key_raw_ref, ref_filename)) return false;
+-    LOG(INFO) << "Wrote system DE key reference to:" << ref_filename;
+-
+-    KeyBuffer per_boot_key;
+-    if (!generateStorageKey(makeGen(options), &per_boot_key)) return false;
+-    EncryptionPolicy per_boot_policy;
+-    if (!install_storage_key(DATA_MNT_POINT, options, per_boot_key, &per_boot_policy)) return false;
+-    std::string per_boot_ref_filename = std::string("/data") + fscrypt_key_per_boot_ref;
+-    if (!android::vold::writeStringToFile(per_boot_policy.key_raw_ref, per_boot_ref_filename))
+-        return false;
+-    LOG(INFO) << "Wrote per boot key reference to:" << per_boot_ref_filename;
++    if (uses_external_key_storage()) {
++        LOG(INFO) << "External recovery key storage is read-only; preserving mode/ref files";
++    } else {
++        std::string options_filename = std::string(DATA_MNT_POINT) + fscrypt_key_mode;
++        if (!android::vold::writeStringToFile(options_string, options_filename)) return false;
++
++        std::string ref_filename = std::string(DATA_MNT_POINT) + fscrypt_key_ref;
++        if (!android::vold::writeStringToFile(device_policy.key_raw_ref, ref_filename)) return false;
++        LOG(INFO) << "Wrote system DE key reference to:" << ref_filename;
++
++        KeyBuffer per_boot_key;
++        if (!generateStorageKey(makeGen(options), &per_boot_key)) return false;
++        EncryptionPolicy per_boot_policy;
++        if (!install_storage_key(DATA_MNT_POINT, options, per_boot_key, &per_boot_policy)) return false;
++        std::string per_boot_ref_filename = std::string("/data") + fscrypt_key_per_boot_ref;
++        if (!android::vold::writeStringToFile(per_boot_policy.key_raw_ref, per_boot_ref_filename))
++            return false;
++        LOG(INFO) << "Wrote per boot key reference to:" << per_boot_ref_filename;
++    }
+ 
+     return true;
+ }
+@@ -501,10 +569,23 @@ install:
+ bool fscrypt_init_user0() {
+     LOG(INFO) << "fscrypt_init_user0";
+     if (fscrypt_is_native()) {
+-        if (!prepare_dir(user_key_dir, 0700, AID_ROOT, AID_ROOT)) return false;
+-        if (!prepare_dir(user_key_dir + "/ce", 0700, AID_ROOT, AID_ROOT)) return false;
+-        if (!prepare_dir(user_key_dir + "/de", 0700, AID_ROOT, AID_ROOT)) return false;
++        if (uses_external_key_storage()) {
++            if (!android::vold::pathExists(user_key_dir()) ||
++                !android::vold::pathExists(user_key_dir() + "/ce") ||
++                !android::vold::pathExists(user_key_dir() + "/de")) {
++                LOG(ERROR) << "External recovery user key directories are unavailable";
++                return false;
++            }
++        } else {
++            if (!prepare_dir(user_key_dir(), 0700, AID_ROOT, AID_ROOT)) return false;
++            if (!prepare_dir(user_key_dir() + "/ce", 0700, AID_ROOT, AID_ROOT)) return false;
++            if (!prepare_dir(user_key_dir() + "/de", 0700, AID_ROOT, AID_ROOT)) return false;
++        }
+         if (!android::vold::pathExists(get_de_key_path(0))) {
++            if (uses_external_key_storage()) {
++                LOG(ERROR) << "Refusing to generate a missing DE key in external recovery storage";
++                return false;
++            }
+             if (!create_and_install_user_keys(0, false)) return false;
+         }
+         // TODO: switch to loading only DE_0 here once framework makes
+@@ -522,7 +603,7 @@ bool fscrypt_init_user0() {
+     // If this is a non-FBE device that recently left an emulated mode,
+     // restore user data directories to known-good state.
+     if (!fscrypt_is_native() && !fscrypt_is_emulated()) {
+-        fscrypt_unlock_user_key(0, 0, "!");
++        fscrypt_unlock_user_key(0, 0, "!", "!");
+     }
+ 
+     // In some scenarios (e.g. userspace reboot) we might unmount userdata
+@@ -657,14 +738,11 @@ static bool parse_hex(const std::string& hex, std::string* result) {
+ }
+ 
+ static std::optional<android::vold::KeyAuthentication> authentication_from_hex(
+-        const std::string& secret_hex) {
+-    std::string secret;
++        const std::string& token_hex, const std::string& secret_hex) {
++    std::string token, secret;
++    if (!parse_hex(token_hex, &token)) return std::optional<android::vold::KeyAuthentication>();
+     if (!parse_hex(secret_hex, &secret)) return std::optional<android::vold::KeyAuthentication>();
+-    if (secret.empty()) {
+-        return kEmptyAuthentication;
+-    } else {
+-        return android::vold::KeyAuthentication(secret);
+-    }
++    return android::vold::KeyAuthentication(token, secret);
+ }
+ 
+ static std::string volkey_path(const std::string& misc_path, const std::string& volume_uuid) {
+@@ -672,7 +750,7 @@ static std::string volkey_path(const std::string& misc_path, const std::string&
+ }
+ 
+ static std::string volume_secdiscardable_path(const std::string& volume_uuid) {
+-    return systemwide_volume_key_dir + "/" + volume_uuid + "/secdiscardable";
++    return systemwide_volume_key_dir() + "/" + volume_uuid + "/secdiscardable";
+ }
+ 
+ static bool read_or_create_volkey(const std::string& misc_path, const std::string& volume_uuid,
+@@ -727,7 +805,7 @@ static bool fscrypt_rewrap_user_key(userid_t user_id, int serial,
+     auto const paths = get_ce_key_paths(directory_path);
+     std::string ce_key_path;
+     if (!get_ce_key_new_path(directory_path, paths, &ce_key_path)) return false;
+-    if (!android::vold::storeKeyAtomically(ce_key_path, user_key_temp, store_auth, ce_key))
++    if (!android::vold::storeKeyAtomically(ce_key_path, user_key_temp(), store_auth, ce_key))
+         return false;
+     return true;
+ }
+@@ -735,7 +813,7 @@ static bool fscrypt_rewrap_user_key(userid_t user_id, int serial,
+ bool fscrypt_add_user_key_auth(userid_t user_id, int serial, const std::string& secret_hex) {
+     LOG(DEBUG) << "fscrypt_add_user_key_auth " << user_id << " serial=" << serial;
+     if (!fscrypt_is_native()) return true;
+-    auto auth = authentication_from_hex(secret_hex);
++    auto auth = authentication_from_hex("!", secret_hex);
+     if (!auth) return false;
+     return fscrypt_rewrap_user_key(user_id, serial, kEmptyAuthentication, *auth);
+ }
+@@ -743,7 +821,7 @@ bool fscrypt_add_user_key_auth(userid_t user_id, int serial, const std::string&
+ bool fscrypt_clear_user_key_auth(userid_t user_id, int serial, const std::string& secret_hex) {
+     LOG(DEBUG) << "fscrypt_clear_user_key_auth " << user_id << " serial=" << serial;
+     if (!fscrypt_is_native()) return true;
+-    auto auth = authentication_from_hex(secret_hex);
++    auto auth = authentication_from_hex("!", secret_hex);
+     if (!auth) return false;
+     return fscrypt_rewrap_user_key(user_id, serial, *auth, kEmptyAuthentication);
+ }
+@@ -771,14 +849,16 @@ std::vector<int> fscrypt_get_unlocked_users() {
+ }
+ 
+ // TODO: rename to 'install' for consistency, and take flags to know which keys to install
+-bool fscrypt_unlock_user_key(userid_t user_id, int serial, const std::string& secret_hex) {
+-    LOG(INFO) << "fscrypt_unlock_user_key " << user_id << " serial=" << serial;
++bool fscrypt_unlock_user_key(userid_t user_id, int serial, const std::string& token_hex,
++                             const std::string& secret_hex) {
++    LOG(INFO) << "fscrypt_unlock_user_key " << user_id << " serial=" << serial
++              << " token_present=" << (token_hex != "!" && !token_hex.empty());
+     if (fscrypt_is_native()) {
+         if (s_ce_policies.count(user_id) != 0) {
+             LOG(WARNING) << "Tried to unlock already-unlocked key for user " << user_id;
+             return true;
+         }
+-        auto auth = authentication_from_hex(secret_hex);
++        auto auth = authentication_from_hex(token_hex, secret_hex);
+         if (!auth) return false;
+         if (!read_and_install_user_ce_key(user_id, *auth)) {
+             LOG(ERROR) << "Couldn't read key for " << user_id;
+diff --git a/FsCrypt.h b/FsCrypt.h
+index 14a115a..541ad11 100644
+--- a/FsCrypt.h
++++ b/FsCrypt.h
+@@ -31,7 +31,8 @@ bool fscrypt_clear_user_key_auth(userid_t user_id, int serial, const std::string
+ bool fscrypt_fixate_newest_user_key_auth(userid_t user_id);
+ 
+ std::vector<int> fscrypt_get_unlocked_users();
+-bool fscrypt_unlock_user_key(userid_t user_id, int serial, const std::string& secret);
++bool fscrypt_unlock_user_key(userid_t user_id, int serial, const std::string& token,
++                             const std::string& secret);
+ bool fscrypt_lock_user_key(userid_t user_id);
+ 
+ bool fscrypt_prepare_user_storage(const std::string& volume_uuid, userid_t user_id, int serial,
+diff --git a/HashPassword.h b/HashPassword.h
+index 73880b1..12cc987 100644
+--- a/HashPassword.h
++++ b/HashPassword.h
+@@ -25,6 +25,7 @@
+ #define PERSONALISATION_APPLICATION_ID "application-id"
+ #define PERSONALIZATION_FBE_KEY "fbe-key"
+ #define PERSONALIZATION_USER_GK_AUTH "user-gk-authentication"
++#define PERSONALIZATION_SP_GK_AUTH "sp-gk-authentication"
+ #define PERSONALISATION_SECDISCARDABLE "secdiscardable-transform"
+ #define PERSONALISATION_CONTEXT "android-synthetic-password-personalization-context"
+ 
+diff --git a/KeyStorage.cpp b/KeyStorage.cpp
+index 51fc4f6..f199103 100644
+--- a/KeyStorage.cpp
++++ b/KeyStorage.cpp
+@@ -43,7 +43,11 @@
+ #include <android-base/properties.h>
+ #include <android-base/unique_fd.h>
+ 
++#include <android/hardware/keymaster/4.0/IKeymasterDevice.h>
+ #include <cutils/properties.h>
++#include <hardware/hw_auth_token.h>
++#include <keymasterV4_0/authorization_set.h>
++#include <keymasterV4_0/keymaster_utils.h>
+ 
+ extern "C" {
+ 
+@@ -53,25 +57,36 @@ extern "C" {
+ namespace android {
+ namespace vold {
+ 
+-const KeyAuthentication kEmptyAuthentication{""};
++const KeyAuthentication kEmptyAuthentication{"", ""};
+ 
+ static constexpr size_t AES_KEY_BYTES = 32;
+ static constexpr size_t GCM_NONCE_BYTES = 12;
+ static constexpr size_t GCM_MAC_BYTES = 16;
+ static constexpr size_t SECDISCARDABLE_BYTES = 1 << 14;
++static constexpr size_t STRETCHED_BYTES = 1 << 6;
+ constexpr int EXT4_AES_256_XTS_KEY_SIZE = 64;
+ 
+ static const char* kCurrentVersion = "1";
+ static const char* kRmPath = "/system/bin/rm";
+ static const char* kSecdiscardPath = "/system/bin/secdiscard";
++static const char* kStretch_none = "none";
++static const char* kStretch_nopassword = "nopassword";
++static const std::string kStretchPrefix_scrypt = "scrypt ";
+ static const char* kHashPrefix_secdiscardable = "Android secdiscardable SHA512";
+ static const char* kHashPrefix_keygen = "Android key wrapping key generation SHA512";
+ static const char* kFn_encrypted_key = "encrypted_key";
+ static const char* kFn_keymaster_key_blob = "keymaster_key_blob";
+ static const char* kFn_keymaster_key_blob_upgraded = "keymaster_key_blob_upgraded";
++static const char* kFn_salt = "salt";
+ static const char* kFn_secdiscardable = "secdiscardable";
++static const char* kFn_stretching = "stretching";
+ static const char* kFn_version = "version";
+-// Note: old key directories may contain a file named "stretching".
++
++// Android 12's KeyMint compatibility layer prefixes blobs produced by legacy Keymaster HALs with
++// "pKMblob" and a one-byte backend selector.  Keystore2 removes this prefix before calling the
++// HIDL HAL.  The authenticated recovery path calls that HAL directly, so it must do the same.
++static constexpr char kKeyMintCompatBlobMagic[] = "pKMblob";
++static constexpr size_t kKeyMintCompatBlobPrefixSize = 8;
+ 
+ static const int32_t KM_TAG_FBE_ICE = static_cast<int32_t>(7 << 28) | 16201;
+ 
+@@ -433,6 +448,173 @@ static bool decryptWithKeymasterKey(Keymaster& keymaster, const std::string& dir
+     return true;
+ }
+ 
++// Keystore2 cannot select a cached HAT for self-managed Domain::BLOB keys because it has no key
++// characteristics to match against.  Legacy CE keys are such blobs and require the Gatekeeper HAT
++// at begin().  Use the platform Keymaster 4.0 HAL directly for this one authenticated recovery
++// operation, matching the vold implementation that originally created these keys.
++static bool decryptWithAuthenticatedKeymasterKey(const std::string& dir,
++                                                 const std::string& appId,
++                                                 const std::string& auth_token,
++                                                 const std::string& ciphertext,
++                                                 KeyBuffer* message) {
++    namespace km4 = ::android::hardware::keymaster::V4_0;
++    namespace km4_support = ::android::hardware::keymaster::V4_0::support;
++
++    if (auth_token.size() != sizeof(hw_auth_token_t)) {
++        LOG(ERROR) << "Gatekeeper HAT should be " << sizeof(hw_auth_token_t) << " bytes, was "
++                   << auth_token.size();
++        return false;
++    }
++    if (ciphertext.size() < GCM_NONCE_BYTES + GCM_MAC_BYTES) {
++        LOG(ERROR) << "Authenticated Keymaster ciphertext is too short";
++        return false;
++    }
++
++    auto keymaster = km4::IKeymasterDevice::getService("default");
++    if (!keymaster) {
++        LOG(ERROR) << "Unable to connect directly to Keymaster 4.0 default service";
++        return false;
++    }
++
++    std::string key_blob;
++    const std::string blob_file = dir + "/" + kFn_keymaster_key_blob;
++    if (!readFileToString(blob_file, &key_blob)) return false;
++
++    std::string hal_key_blob = key_blob;
++    if (key_blob.size() >= kKeyMintCompatBlobPrefixSize &&
++        key_blob.compare(0, sizeof(kKeyMintCompatBlobMagic) - 1,
++                         kKeyMintCompatBlobMagic) == 0) {
++        const uint8_t backend = static_cast<uint8_t>(key_blob[kKeyMintCompatBlobPrefixSize - 1]);
++        if (backend == 1) {
++            LOG(ERROR) << "Authenticated CE key blob belongs to software KeyMint; refusing to send "
++                          "it to the hardware Keymaster HAL";
++            return false;
++        }
++        if (backend != 0) {
++            LOG(ERROR) << "Authenticated CE key blob has an invalid KeyMint compatibility prefix";
++            return false;
++        }
++        hal_key_blob.erase(0, kKeyMintCompatBlobPrefixSize);
++        LOG(INFO) << "Removed Android 12 KeyMint compatibility prefix from CE key blob: "
++                  << key_blob.size() << " -> " << hal_key_blob.size() << " bytes";
++    }
++
++    const std::string nonce = ciphertext.substr(0, GCM_NONCE_BYTES);
++    const std::string body_and_mac = ciphertext.substr(GCM_NONCE_BYTES);
++    auto in_params = km4::AuthorizationSetBuilder()
++                             .GcmModeMacLen(GCM_MAC_BYTES * 8)
++                             .Authorization(km4::TAG_APPLICATION_ID,
++                                            km4_support::blob2hidlVec(appId))
++                             .Authorization(km4::TAG_NONCE,
++                                            km4_support::blob2hidlVec(nonce));
++    const auto hat =
++            km4_support::hidlVec2AuthToken(km4_support::blob2hidlVec(auth_token));
++
++    // Resolve the blob's authenticated SID before begin().  This is a read-only check and
++    // catches the easy-to-miss Android synthetic-password distinction between the fake-user
++    // HAT used to open the SP blob and the primary-user HAT required by the CE key.
++    km4::ErrorCode characteristics_error = km4::ErrorCode::UNKNOWN_ERROR;
++    km4::KeyCharacteristics characteristics;
++    auto characteristics_result = keymaster->getKeyCharacteristics(
++            km4_support::blob2hidlVec(hal_key_blob), km4_support::blob2hidlVec(appId), {},
++            [&](km4::ErrorCode error, const km4::KeyCharacteristics& result) {
++                characteristics_error = error;
++                characteristics = result;
++            });
++    if (!characteristics_result.isOk() || characteristics_error != km4::ErrorCode::OK) {
++        LOG(ERROR) << "Authenticated CE key characteristics failed, transport_ok="
++                   << characteristics_result.isOk() << " code="
++                   << static_cast<int32_t>(characteristics_error);
++        return false;
++    }
++    bool found_secure_user_id = false;
++    bool secure_user_id_matches = false;
++    const auto inspect_sid = [&](const ::android::hardware::hidl_vec<km4::KeyParameter>& params) {
++        for (const auto& param : params) {
++            if (param.tag == km4::Tag::USER_SECURE_ID) {
++                found_secure_user_id = true;
++                secure_user_id_matches |= (param.f.longInteger == hat.userId);
++            }
++        }
++    };
++    inspect_sid(characteristics.hardwareEnforced);
++    inspect_sid(characteristics.softwareEnforced);
++    if (!found_secure_user_id || !secure_user_id_matches) {
++        LOG(ERROR) << "Synthetic-password HAT Secure User ID does not authorize the CE key";
++        return false;
++    }
++    LOG(INFO) << "Synthetic-password HAT Secure User ID matches the CE key authorization";
++
++    km4::ErrorCode begin_error = km4::ErrorCode::UNKNOWN_ERROR;
++    km4::OperationHandle operation_handle = 0;
++    auto begin_result = keymaster->begin(
++            km4::KeyPurpose::DECRYPT, km4_support::blob2hidlVec(hal_key_blob),
++            in_params.hidl_data(), hat,
++            [&](km4::ErrorCode error,
++                const ::android::hardware::hidl_vec<km4::KeyParameter>&,
++                km4::OperationHandle handle) {
++                begin_error = error;
++                operation_handle = handle;
++            });
++    if (!begin_result.isOk()) {
++        LOG(ERROR) << "Authenticated Keymaster begin transaction failed: "
++                   << begin_result.description();
++        return false;
++    }
++    if (begin_error != km4::ErrorCode::OK) {
++        LOG(ERROR) << "Authenticated Keymaster begin failed, code "
++                   << static_cast<int32_t>(begin_error);
++        return false;
++    }
++
++    const km4::AuthorizationSet empty_params;
++    const km4::HardwareAuthToken empty_hat{};
++    const km4::VerificationToken empty_verification{};
++    km4::ErrorCode update_error = km4::ErrorCode::UNKNOWN_ERROR;
++    uint32_t input_consumed = 0;
++    ::android::hardware::hidl_vec<uint8_t> update_output;
++    auto update_result = keymaster->update(
++            operation_handle, empty_params.hidl_data(),
++            km4_support::blob2hidlVec(body_and_mac), empty_hat, empty_verification,
++            [&](km4::ErrorCode error, uint32_t consumed,
++                const ::android::hardware::hidl_vec<km4::KeyParameter>&,
++                const ::android::hardware::hidl_vec<uint8_t>& output) {
++                update_error = error;
++                input_consumed = consumed;
++                update_output = output;
++            });
++    if (!update_result.isOk() || update_error != km4::ErrorCode::OK ||
++        input_consumed != body_and_mac.size()) {
++        LOG(ERROR) << "Authenticated Keymaster update failed, transport_ok="
++                   << update_result.isOk() << " code=" << static_cast<int32_t>(update_error)
++                   << " consumed=" << input_consumed << "/" << body_and_mac.size();
++        keymaster->abort(operation_handle);
++        return false;
++    }
++
++    km4::ErrorCode finish_error = km4::ErrorCode::UNKNOWN_ERROR;
++    ::android::hardware::hidl_vec<uint8_t> finish_output;
++    auto finish_result = keymaster->finish(
++            operation_handle, empty_params.hidl_data(), {}, {}, empty_hat, empty_verification,
++            [&](km4::ErrorCode error,
++                const ::android::hardware::hidl_vec<km4::KeyParameter>&,
++                const ::android::hardware::hidl_vec<uint8_t>& output) {
++                finish_error = error;
++                finish_output = output;
++            });
++    if (!finish_result.isOk() || finish_error != km4::ErrorCode::OK) {
++        LOG(ERROR) << "Authenticated Keymaster finish failed, transport_ok="
++                   << finish_result.isOk() << " code=" << static_cast<int32_t>(finish_error);
++        return false;
++    }
++
++    message->clear();
++    message->insert(message->end(), update_output.begin(), update_output.end());
++    message->insert(message->end(), finish_output.begin(), finish_output.end());
++    LOG(INFO) << "Authenticated Keymaster CE key decryption succeeded";
++    return true;
++}
++
+ static std::string generateAppId(const KeyAuthentication& auth,
+                                  const std::string& secdiscardable_hash) {
+     std::string appId = secdiscardable_hash + auth.secret;
+@@ -452,6 +634,54 @@ static std::string generateAppId(const KeyAuthentication& auth,
+     return appId;
+ }
+ 
++static bool stretchingNeedsSalt(const std::string& stretching) {
++    return stretching != kStretch_nopassword && stretching != kStretch_none;
++}
++
++// Android versions before the removal of legacy key stretching stored these parameters beside
++// the encrypted CE key.  Devices upgraded from those versions must continue to apply the recorded
++// transform; using the modern raw secret produces a different wrapping key and fails GCM auth.
++static bool stretchSecret(const std::string& stretching, const std::string& secret,
++                          const std::string& salt, std::string* stretched) {
++    if (stretching == kStretch_nopassword) {
++        if (!secret.empty()) {
++            LOG(WARNING) << "Password present but stretching is nopassword";
++        }
++        stretched->clear();
++    } else if (stretching == kStretch_none) {
++        *stretched = secret;
++    } else if (stretching.compare(0, kStretchPrefix_scrypt.size(), kStretchPrefix_scrypt) == 0) {
++        int Nf, rf, pf;
++        if (!parse_scrypt_parameters(stretching.substr(kStretchPrefix_scrypt.size()).c_str(), &Nf,
++                                     &rf, &pf)) {
++            LOG(ERROR) << "Unable to parse scrypt params in stretching: " << stretching;
++            return false;
++        }
++        stretched->assign(STRETCHED_BYTES, '\0');
++        if (crypto_scrypt(reinterpret_cast<const uint8_t*>(secret.data()), secret.size(),
++                          reinterpret_cast<const uint8_t*>(salt.data()), salt.size(), 1 << Nf,
++                          1 << rf, 1 << pf, reinterpret_cast<uint8_t*>(&(*stretched)[0]),
++                          stretched->size()) != 0) {
++            LOG(ERROR) << "scrypt failed with params: " << stretching;
++            return false;
++        }
++    } else {
++        LOG(ERROR) << "Unknown stretching type: " << stretching;
++        return false;
++    }
++    return true;
++}
++
++static bool generateLegacyAppId(const KeyAuthentication& auth, const std::string& stretching,
++                                const std::string& salt,
++                                const std::string& secdiscardable_hash, std::string* appId) {
++    std::string stretched;
++    if (!stretchSecret(stretching, auth.secret, salt, &stretched)) return false;
++    KeyAuthentication stretched_auth(auth.token, stretched);
++    *appId = generateAppId(stretched_auth, secdiscardable_hash);
++    return true;
++}
++
+ static void logOpensslError() {
+     LOG(ERROR) << "Openssl error: " << ERR_get_error();
+ }
+@@ -617,15 +847,36 @@ bool retrieveKey(const std::string& dir, const KeyAuthentication& auth, KeyBuffe
+     }
+     std::string secdiscardable_hash;
+     if (!readSecdiscardable(dir + "/" + kFn_secdiscardable, &secdiscardable_hash)) return false;
+-    std::string appId = generateAppId(auth, secdiscardable_hash);
++    std::string appId;
++    const std::string stretching_path = dir + "/" + kFn_stretching;
++    if (pathExists(stretching_path)) {
++        std::string stretching;
++        if (!readFileToString(stretching_path, &stretching)) return false;
++        std::string salt;
++        if (stretchingNeedsSalt(stretching) &&
++            !readFileToString(dir + "/" + kFn_salt, &salt)) {
++            return false;
++        }
++        LOG(INFO) << "Using legacy key stretching: " << stretching;
++        if (!generateLegacyAppId(auth, stretching, salt, secdiscardable_hash, &appId)) return false;
++    } else {
++        appId = generateAppId(auth, secdiscardable_hash);
++    }
+     std::string encryptedMessage;
+     if (!readFileToString(dir + "/" + kFn_encrypted_key, &encryptedMessage)) return false;
+     if (auth.usesKeymaster()) {
+-        Keymaster keymaster;
+-        if (!keymaster) return false;
+-        km::AuthorizationSet keyParams = beginParams(appId);
+-        if (!decryptWithKeymasterKey(keymaster, dir, keyParams, encryptedMessage, key))
+-            return false;
++        if (!auth.token.empty()) {
++            if (!decryptWithAuthenticatedKeymasterKey(dir, appId, auth.token, encryptedMessage,
++                                                      key)) {
++                return false;
++            }
++        } else {
++            Keymaster keymaster;
++            if (!keymaster) return false;
++            km::AuthorizationSet keyParams = beginParams(appId);
++            if (!decryptWithKeymasterKey(keymaster, dir, keyParams, encryptedMessage, key))
++                return false;
++        }
+     } else {
+         if (!decryptWithoutKeymaster(appId, encryptedMessage, key)) return false;
+     }
+diff --git a/KeyStorage.h b/KeyStorage.h
+index e379c0c..c4d9b7e 100644
+--- a/KeyStorage.h
++++ b/KeyStorage.h
+@@ -29,10 +29,15 @@ namespace vold {
+ // Represents the information needed to decrypt a disk encryption key.
+ class KeyAuthentication {
+   public:
+-    KeyAuthentication(const std::string& s) : secret{s} {};
++    KeyAuthentication(const std::string& s) : token{}, secret{s} {};
++    KeyAuthentication(const std::string& t, const std::string& s) : token{t}, secret{s} {};
+ 
+-    bool usesKeymaster() const { return secret.empty(); };
++    // Legacy CE keys may be Keymaster-wrapped even though their appId also contains a secret.
++    // Keystore2 receives the actual HAT through IKeystoreAuthorization; the token stored here
++    // selects the matching legacy Keymaster path.
++    bool usesKeymaster() const { return !token.empty() || secret.empty(); };
+ 
++    const std::string token;
+     const std::string secret;
+ };
+ 
+diff --git a/VoldNativeService.cpp b/VoldNativeService.cpp
+index accf700..cddb6a0 100644
+--- a/VoldNativeService.cpp
++++ b/VoldNativeService.cpp
+@@ -781,12 +781,7 @@ binder::Status VoldNativeService::unlockUserKey(int32_t userId, int32_t userSeri
+     ENFORCE_SYSTEM_OR_ROOT;
+     ACQUIRE_CRYPT_LOCK;
+ 
+-    if (!token_empty(token)) {
+-        LOG(ERROR) << "Vold doesn't use auth tokens, but non-empty token passed to unlockUserKey.";
+-        return binder::Status::fromServiceSpecificError(-EINVAL);
+-    }
+-
+-    return translateBool(fscrypt_unlock_user_key(userId, userSerial, secret));
++    return translateBool(fscrypt_unlock_user_key(userId, userSerial, token, secret));
+ }
+ 
+ binder::Status VoldNativeService::lockUserKey(int32_t userId) {
