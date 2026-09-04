@@ -1,4 +1,4 @@
-[SIZE=4][B]TWRP 3.7.1_12 с рабочей FBE + Magisk 30.7 для SM-N9750 HZE1[/B][/SIZE]
+[SIZE=4][B]TWRP 3.7.1_12 с рабочей FBE + Magisk 30.7 для SM-N9750 HZE1 — v1.0.1[/B][/SIZE]
 
 [B]Устройство:[/B] Samsung Galaxy Note10+ Snapdragon, SM-N9750 / d2q
 [B]Обязательная база:[/B] N9750ZSU6HZE1, Android 12
@@ -43,18 +43,27 @@ Samsung-службу vendor_flash_recovery. Поэтому recovery-from-boot.p 
 [*]Проверить модель SM-N9750 и сборку N9750ZSU6HZE1.
 [*]Проверить SHA256SUMS из релиза.
 [*]Перевести телефон в Download Mode.
-[*]Запустить flash-heimdall.sh --flash либо прошить опубликованные BOOT и RECOVERY одной командой Heimdall с --no-reboot.
+[*]Запустить flash-heimdall.sh --flash-no-wipe либо прошить опубликованные BOOT и RECOVERY одной командой Heimdall с --no-reboot. При уже разблокированном загрузчике USERDATA не затрагивается.
 [*]После успешной прошивки удерживать Volume Down + Side/Power до погасания экрана и сразу переключиться на Volume Up + Side/Power при подключённом USB.
 [*]В TWRP ввести штатный PIN Android и проверить расшифрованную внутреннюю память.
 [*]Reboot System, затем установить официальный APK Magisk 30.7.
 [/LIST]
+
+[B]Режим только TWRP без wipe:[/B] если загрузчик уже разблокирован, команда
+[CODE]./flash-heimdall.sh --twrp-only-no-wipe[/CODE]
+прошивает только RECOVERY и не меняет BOOT или USERDATA. На полностью стоковом
+BOOT Samsung может восстановить стоковый recovery после следующего запуска
+Android. Для постоянного TWRP и Magisk используйте
+[CODE]./flash-heimdall.sh --flash-no-wipe[/CODE]
+Первая разблокировка загрузчика Samsung всегда стирает данные — обойти это
+данным комплектом нельзя.
 [/SPOILER]
 
 [B]GitHub, исходные патчи, подробные инструкции и changelog:[/B]
 https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE
 
-[B]Готовый релиз v1.0.0:[/B]
-https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.0
+[B]Готовый релиз v1.0.1:[/B]
+https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.1
 
 [B][COLOR=red]Нельзя прошивать на SM-N975F, SM-N976B, d2s, d2x, другую
 ревизию загрузчика или другую базовую прошивку.[/COLOR][/B]

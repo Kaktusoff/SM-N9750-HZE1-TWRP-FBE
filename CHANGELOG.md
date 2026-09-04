@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.1 — 2026-09-04
+
+Installer and documentation update; binary images are unchanged from v1.0.0.
+
+- Added guarded `--flash-no-wipe` mode for the tested BOOT+RECOVERY pair on an
+  already-unlocked exact HZE1 device.
+- Added `--twrp-only-no-wipe` mode, which flashes RECOVERY without touching BOOT
+  or USERDATA.
+- Documented that the first Samsung bootloader unlock always wipes data and
+  that stock BOOT can restore stock recovery after a recovery-only install.
+
 ## v1.0.0 — 2026-09-04
 
 First device-tested public release.
@@ -38,4 +49,3 @@ First device-tested public release.
 - RECOVERY partition read-back SHA-256 matches the release image after normal
   Android boot.
 - TWRP was booted again after Android and still reported lab13.
-

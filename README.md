@@ -11,7 +11,8 @@ This is not a custom ROM. It keeps the stock HZE1 system and replaces only the
 
 ## Status
 
-Release `v1.0.0` was tested on physical hardware on 2026-09-04:
+Release `v1.0.1` uses the same device-tested images as v1.0.0 and adds explicit
+guarded no-wipe installation modes:
 
 - Android HZE1 boots normally without a special key combination;
 - Magisk 30.7 and `su` work from the normal boot path;
@@ -20,6 +21,10 @@ Release `v1.0.0` was tested on physical hardware on 2026-09-04:
 - primary-user CE storage is decrypted through a SID-validated synthetic-password HAT;
 - the custom recovery survives a normal Android boot;
 - BOOT and RECOVERY read-back hashes match the published images.
+- `--flash-no-wipe` flashes the tested BOOT+RECOVERY pair without touching
+  `USERDATA` when the bootloader is already unlocked;
+- `--twrp-only-no-wipe` flashes RECOVERY only, with a clear warning that stock
+  BOOT may restore stock recovery after Android starts.
 
 ## Exact compatibility
 
@@ -53,6 +58,8 @@ Changelog: [English](CHANGELOG.md) · [Русский](CHANGELOG_RU.md). Root st
 ## Important warning
 
 Unlocking the Samsung bootloader wipes user data and permanently trips Knox.
+Once the bootloader is already unlocked, flashing the exact published BOOT and
+RECOVERY images does not itself wipe `USERDATA`.
 Samsung Pay, Secure Folder and other Knox-backed functions may never work again,
 even after returning to stock. Flashing the wrong model or firmware can leave the
 device unable to boot. Make an offline backup before starting.

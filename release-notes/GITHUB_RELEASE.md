@@ -1,7 +1,8 @@
-# v1.0.0 — device-tested HZE1 FBE recovery and normal-boot Magisk
+# v1.0.1 — no-wipe installer modes for device-tested HZE1 images
 
-First public, physical-device-tested release for the Snapdragon Samsung Galaxy
-Note10+ `SM-N9750` on exact stock firmware `N9750ZSU6HZE1`.
+Installer/documentation update for the physical-device-tested Snapdragon Samsung
+Galaxy Note10+ `SM-N9750` images on exact stock firmware `N9750ZSU6HZE1`.
+BOOT and RECOVERY are byte-identical to v1.0.0.
 
 ## Highlights
 
@@ -13,12 +14,16 @@ Note10+ `SM-N9750` on exact stock firmware `N9750ZSU6HZE1`.
 - Custom recovery survives normal Android boot without modifying `/vendor`.
 - BOOT and RECOVERY hashes verified by reading the partitions back from the
   physical device.
+- `--flash-no-wipe` installs the persistent BOOT+RECOVERY pair without touching
+  USERDATA when the bootloader is already unlocked.
+- `--twrp-only-no-wipe` flashes RECOVERY only; stock BOOT may restore stock
+  recovery after Android starts.
 
 ## Assets
 
 - `SM-N9750-HZE1-Magisk-v30.7-BOOT-v1.0.0.img`
 - `SM-N9750-HZE1-TWRP-3.7.1_12-FBE-v1.0.0.img`
-- `SM-N9750-HZE1-TWRP-Magisk-v1.0.0.zip`
+- `SM-N9750-HZE1-TWRP-Magisk-v1.0.1.zip`
 - `device-samsung-d2q-HZE1-lab13.tar.zst`
 - `SHA256SUMS`
 
@@ -28,15 +33,16 @@ Read `INSTALL.md` or `INSTALL_RU.md` before flashing.
 
 Only `SM-N9750` / `d2q` / `N9750ZSU6HZE1` is supported. Do not flash on
 `SM-N975F`, `SM-N976B`, another model, or another base firmware. Bootloader
-unlock wipes data and permanently trips Knox.
+unlock wipes data and permanently trips Knox. The first unlock cannot be made
+no-wipe by this package.
 
 ---
 
-# v1.0.0 — проверенные на устройстве TWRP с FBE и Magisk при обычной загрузке
+# v1.0.1 — режимы установки без wipe для проверенных образов HZE1
 
-Первый публичный релиз для Snapdragon Samsung Galaxy Note10+ `SM-N9750` на
-строго определённой стоковой прошивке `N9750ZSU6HZE1`, проверенный на физическом
-телефоне.
+Обновление установщика и документации для проверенных на физическом Snapdragon
+Samsung Galaxy Note10+ `SM-N9750` образов на точной стоковой прошивке
+`N9750ZSU6HZE1`. BOOT и RECOVERY побайтно совпадают с v1.0.0.
 
 ## Главное
 
@@ -49,12 +55,16 @@ unlock wipes data and permanently trips Knox.
 - TWRP сохраняется после загрузки Android без изменения `/vendor`.
 - Хэши BOOT и RECOVERY проверены чтением разделов обратно с физического
   устройства.
+- `--flash-no-wipe` устанавливает постоянную пару BOOT+RECOVERY без изменения
+  USERDATA, если загрузчик уже разблокирован.
+- `--twrp-only-no-wipe` прошивает только RECOVERY; стоковый BOOT может
+  восстановить стоковый recovery после запуска Android.
 
 ## Файлы
 
 - `SM-N9750-HZE1-Magisk-v30.7-BOOT-v1.0.0.img`
 - `SM-N9750-HZE1-TWRP-3.7.1_12-FBE-v1.0.0.img`
-- `SM-N9750-HZE1-TWRP-Magisk-v1.0.0.zip`
+- `SM-N9750-HZE1-TWRP-Magisk-v1.0.1.zip`
 - `device-samsung-d2q-HZE1-lab13.tar.zst`
 - `SHA256SUMS`
 
@@ -64,7 +74,8 @@ unlock wipes data and permanently trips Knox.
 
 Поддерживается только `SM-N9750` / `d2q` / `N9750ZSU6HZE1`. Не прошивайте на
 `SM-N975F`, `SM-N976B`, другую модель или другую базовую прошивку. Разблокировка
-загрузчика стирает данные и необратимо сжигает Knox.
+загрузчика стирает данные и необратимо сжигает Knox. Первую разблокировку нельзя
+сделать без wipe средствами этого комплекта.
 
 ## Support / Поддержать проект
 

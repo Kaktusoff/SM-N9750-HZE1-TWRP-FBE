@@ -1,4 +1,4 @@
-[SIZE=6][B]TWRP 3.7.1_12 FBE + Magisk 30.7 for SM-N9750 HZE1[/B][/SIZE]
+[SIZE=6][B]TWRP 3.7.1_12 FBE + Magisk 30.7 for SM-N9750 HZE1 — v1.0.1[/B][/SIZE]
 
 [B]Device:[/B] Samsung Galaxy Note10+ Snapdragon, SM-N9750 / d2q
 [B]Required firmware:[/B] N9750ZSU6HZE1, Android 12
@@ -36,17 +36,23 @@ modified.
 [*]Back up everything and unlock the bootloader. This wipes data and permanently trips Knox.
 [*]Verify model SM-N9750 and build N9750ZSU6HZE1.
 [*]Verify SHA256SUMS from the release.
-[*]Enter Download Mode and run the included flash-heimdall.sh --flash, or flash the published BOOT and RECOVERY images together with Heimdall and --no-reboot.
+[*]Enter Download Mode and run the included flash-heimdall.sh --flash-no-wipe, or flash the published BOOT and RECOVERY images together with Heimdall and --no-reboot. This does not touch USERDATA when the bootloader is already unlocked.
 [*]Immediately boot TWRP with USB connected and Volume Up + Side/Power.
 [*]Enter the Android PIN and confirm that internal storage is decrypted.
 [*]Reboot System and install the official Magisk 30.7 manager APK.
 [/LIST]
 
+[B]TWRP-only/no-wipe mode:[/B] on an already-unlocked exact HZE1 device, run
+[CODE]./flash-heimdall.sh --twrp-only-no-wipe[/CODE]
+This flashes RECOVERY only and leaves BOOT and USERDATA untouched. On stock
+BOOT, Samsung may restore stock recovery after the next Android boot. The first
+bootloader unlock itself always wipes data; there is no supported bypass.
+
 [B]Downloads, full instructions, sources and changelog:[/B]
 https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE
 
 [B]Release:[/B]
-https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.0
+https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.1
 
 [SIZE=5][B]Warning[/B][/SIZE]
 

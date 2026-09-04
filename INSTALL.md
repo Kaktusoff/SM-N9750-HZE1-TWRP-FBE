@@ -43,7 +43,33 @@ adb shell getprop ro.build.version.incremental
 
 Expected output is `SM-N9750` and `N9750ZSU6HZE1`.
 
-## 4. Flash BOOT and RECOVERY
+## 4. Choose the flashing mode
+
+Neither mode below formats or flashes `USERDATA`. This is a no-wipe upgrade only
+when Download Mode already reports an unlocked bootloader. The first Samsung
+bootloader unlock always performs a factory reset and cannot be made no-wipe by
+this package.
+
+For persistent TWRP plus Magisk normal boot, use:
+
+```bash
+./flash-heimdall.sh --flash-no-wipe
+```
+
+This flashes only `BOOT` and `RECOVERY`; existing Android data is preserved on
+the exact supported HZE1 base. `--flash` remains an alias for this paired mode.
+
+To install only TWRP without touching `BOOT` or user data, use:
+
+```bash
+./flash-heimdall.sh --twrp-only-no-wipe
+```
+
+Recovery-only mode is useful for testing or accessing existing encrypted data.
+On an otherwise stock BOOT, Samsung can restore stock recovery after the next
+normal Android boot. For persistent TWRP, use the paired mode above.
+
+## 5. Flash and boot TWRP
 
 Enter Download Mode, connect USB, and verify detection:
 
@@ -54,7 +80,7 @@ heimdall detect
 Use the included guarded installer:
 
 ```bash
-./flash-heimdall.sh --flash
+./flash-heimdall.sh --flash-no-wipe
 ```
 
 Or flash manually:
@@ -70,7 +96,7 @@ After Heimdall reports success, hold Volume Down + Side/Power until the display
 turns black, then immediately switch to Volume Up + Side/Power while USB remains
 connected. Release the buttons when TWRP appears.
 
-## 5. First TWRP boot
+## 6. First TWRP boot
 
 1. Confirm the version is `3.7.1_12-HZE1-FBE-lab-13`.
 2. Enter the same PIN/password used by Android.
@@ -83,7 +109,11 @@ Android should now boot normally. The patched BOOT stops Samsung's
 `vendor_flash_recovery` service during early init, so the custom recovery is not
 reconstructed back to stock.
 
-## 6. Install the Magisk app
+If recovery-only mode was selected, choosing **Reboot > System** does not add
+root and a stock BOOT may restore stock recovery. The steps below apply to the
+paired BOOT+RECOVERY mode.
+
+## 7. Install the Magisk app
 
 Download the official Magisk 30.7 APK from the
 [Magisk releases page](https://github.com/topjohnwu/Magisk/releases/tag/v30.7)
@@ -104,12 +134,12 @@ To hide the manager itself, open Magisk Settings, choose **Hide the Magisk app**
 accept the default neutral label or enter another one, and let Magisk create a
 random package ID.
 
-## 7. Entering recovery later
+## 8. Entering recovery later
 
 Power the phone off. Keep USB connected, then hold Volume Up + Side/Power until
 TWRP appears.
 
-## 8. Rollback
+## 9. Rollback
 
 The safest complete rollback is to flash the full, exact
 `N9750ZSU6HZE1` Samsung firmware. Flashing only stock BOOT restores normal
@@ -119,4 +149,3 @@ on the next boot.
 Relock the bootloader only after every partition has been returned to complete
 stock firmware and the phone has booted successfully. Relocking also wipes data;
 Knox remains tripped.
-
