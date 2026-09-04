@@ -1,0 +1,7 @@
+/release/
+*.img
+*.tar
+*.tar.md5
+*.zip
+*.zst
+
