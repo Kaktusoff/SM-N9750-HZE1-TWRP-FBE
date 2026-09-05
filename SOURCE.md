@@ -33,6 +33,13 @@ The published final image was repacked into the exact stock HZE1 recovery
 container. A build output with a different size or hardware payload must not be
 flashed as though it were the published image.
 
-The normal-boot image was created from the exact live HZE1 BOOT using official
-Magisk 30.7 scripts and the supplied `source/boot-overlay/twrp-survival.rc`.
+The v1.0.1 normal-boot image starts from the exact device-read Magisk Alpha
+`e8a58776-alpha (30700)` BOOT with SHA-256
+`9dd7c4f948bf9f314f111ea42b5abd9641931b0f9282c33e031d3854bb7baf00`.
+`scripts/build-alpha-survival-boot.sh` adds the supplied
+`source/boot-overlay/twrp-survival.rc`, repacks the Samsung container, restores
+the exact 67,108,864-byte partition geometry, and refuses output that does not
+match the device-tested v1.0.1 SHA-256.
 
+Magisk Alpha source is the GPL-3.0 fork at
+https://github.com/vvb2060/Magisk.

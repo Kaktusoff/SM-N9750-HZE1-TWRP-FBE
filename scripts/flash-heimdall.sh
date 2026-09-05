@@ -17,8 +17,8 @@ if [[ "$mode" != "--flash" && "$mode" != "--flash-no-wipe" && "$mode" != "--twrp
 fi
 
 release_dir="${2:-$default_dir}"
-boot="$release_dir/SM-N9750-HZE1-Magisk-v30.7-BOOT-v1.0.0.img"
-recovery="$release_dir/SM-N9750-HZE1-TWRP-3.7.1_12-FBE-v1.0.0.img"
+boot="$release_dir/SM-N9750-HZE1-Magisk-Alpha-30700-BOOT-v1.0.1.img"
+recovery="$release_dir/SM-N9750-HZE1-TWRP-3.7.1_12-FBE-v1.0.1.img"
 
 command -v heimdall >/dev/null || {
   echo "heimdall is not installed" >&2
@@ -57,7 +57,7 @@ if [[ "$mode" == "--twrp-only-no-wipe" ]]; then
   echo "RECOVERY-only mode selected: Android data and BOOT will not be touched."
   echo "On a stock BOOT, Samsung may restore stock recovery after the next Android boot."
 else
-  echo "BOOT+RECOVERY mode selected: persistent TWRP and Magisk normal boot."
+  echo "BOOT+RECOVERY mode selected: persistent TWRP and Magisk Alpha normal boot."
 fi
 read -r -p "Type SM-N9750-HZE1 to continue: " confirmation
 [[ "$confirmation" == "SM-N9750-HZE1" ]] || {

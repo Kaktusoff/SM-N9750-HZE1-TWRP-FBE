@@ -33,16 +33,20 @@ User 0 Decrypted Successfully!
 ## Boot image
 
 - size: `67,108,864` bytes;
-- SHA-256: `88439e04000aea03d7477c3f32e6b30fa95040f83c97b893a066b039592c529f`;
+- v1.0.1 SHA-256: `027447589dc1845d65d6018df5322d54b01410e939a441e0fdcf63ae9c12a8c5`;
+- device-read Alpha input SHA-256:
+  `9dd7c4f948bf9f314f111ea42b5abd9641931b0f9282c33e031d3854bb7baf00`;
 - exact source stock BOOT SHA-256:
   `6718aba700e9850f76117f9f2ee74f56de7bbcd12eb324b7443a6cfb5bcae209`;
-- patched by the official Magisk 30.7 `boot_patch.sh`;
-- `RECOVERYMODE=false`, `KEEPVERITY=true`, `KEEPFORCEENCRYPT=true`,
-  `PATCHVBMETAFLAG=true`, `LEGACYSAR=true`, `PREINITDEVICE=cache`;
+- patched with Magisk Alpha `e8a58776-alpha (30700)`;
+- `.backup/.magisk` contains `RECOVERYMODE=false`, `VENDORBOOT=false`,
+  `KEEPVERITY=true`, `KEEPFORCEENCRYPT=true`, and `PREINITDEVICE=cache`;
 - kernel differs from stock by the expected seven Magisk patch bytes for
   Samsung defex and `skip_initramfs`/`want_initramfs`;
 - embedded `overlay.d/twrp-survival.rc` stops the stock recovery reconstruction
-  service before its `class main` start.
+  service before its `class main` start;
+- the deterministic merge is implemented by
+  `scripts/build-alpha-survival-boot.sh`.
 
 ## Physical-device verification
 
@@ -51,15 +55,27 @@ User 0 Decrypted Successfully!
 | Exact firmware `N9750ZSU6HZE1` | PASS |
 | Normal Android boot | PASS |
 | `sys.boot_completed=1` | PASS |
-| Magisk 30.7 daemon | PASS |
+| Magisk Alpha `e8a58776` / 30700 daemon | PASS |
 | `su -c id` in `u:r:magisk:s0` | PASS |
 | TWRP lab13 boot | PASS |
 | Existing PIN decrypts `/data` | PASS |
 | CE Keymaster authorization | PASS |
 | Recovery survives Android boot | PASS |
-| BOOT read-back hash | PASS |
-| RECOVERY read-back hash | PASS |
+| Android → TWRP → Android cycle | PASS |
+| BOOT read-back SHA-256 `027447…a8c5` | PASS |
+| RECOVERY read-back SHA-256 `d8b050…7415` | PASS |
+| Three Play Integrity verdicts | PASS on 2026-09-05 |
+| T-Pay with provisioned card | PASS on 2026-09-05 |
+| T-Bank 8.2.2 fingerprint sign-in | PASS after removing `/sdcard/TWRP` |
+
+The banking result was obtained on the same phone with the same Alpha core and
+unchanged `/data/adb` configuration before adding the recovery-survival rc.
+That result included three green Play Integrity verdicts, T-Pay availability,
+and a successfully added card. A separate T-Bank 8.2.2 MIAF path check matched
+`/storage/emulated/0/TWRP`; even the empty directory removed the biometric
+option. Moving it intact to `RecoveryBackups` without clearing app data restored
+fingerprint sign-in while T-Pay remained operational. App-side/server-side
+verdicts are not immutable and are not treated as a permanent image property.
 
 MTP transfer, destructive format operations, full backup/restore, other users,
 and firmware versions other than HZE1 are not claimed as tested.
-
