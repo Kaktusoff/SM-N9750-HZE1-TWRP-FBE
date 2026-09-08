@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.2 — 2026-09-08
+
+- Added an incremental BOOT-only update from Magisk Alpha
+  `e8a58776-alpha (30700)` to `96221b69-alpha (31000)` for an already-unlocked
+  exact HZE1 device with v1.0.1 installed.
+- Kept `overlay.d/twrp-survival.rc` byte-identical. The kernel, kernel DTB, and
+  Magisk configuration are also byte-identical to the working v1.0.1 BOOT;
+  only the Alpha ramdisk payload was updated.
+- Verified on the physical `SM-N9750`: Android boot, unlocked user-0 CE data,
+  Alpha 31000 daemon, root, enforced DenyList, BOOT read-back, unchanged
+  RECOVERY, and a complete Android → TWRP → Android cycle.
+- Added raw Heimdall BOOT, a BOOT-only Odin AP, the exact signer-matched Alpha
+  31000 APK, bilingual instructions, and checksums. No RECOVERY, USERDATA, PIT,
+  BL, CP, CSC, or SUPER is present in the update package.
+- Play Integrity and banking-app decisions were not re-tested for this core-
+  only update and are not claimed as a permanent image property.
+
 ## v1.0.1 — fully replaced on 2026-09-05
 
 The existing v1.0.1 release was replaced in place with the unified Alpha + TWRP

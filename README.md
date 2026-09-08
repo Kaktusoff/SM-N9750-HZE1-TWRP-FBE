@@ -1,4 +1,4 @@
-# SM-N9750 HZE1: TWRP FBE + Magisk Alpha — v1.0.1
+# SM-N9750 HZE1: TWRP FBE + Magisk Alpha — v1.0.1 base + v1.0.2 BOOT update
 
 **[Русский](README_RU.md)** · [English](README.md)
 
@@ -8,6 +8,19 @@ Note10+ `SM-N9750` on the exact stock base `N9750ZSU6HZE1` (Android 12).
 This is not a custom ROM. Stock One UI stays installed and the package changes
 only `BOOT` and `RECOVERY`. The first Samsung bootloader unlock still wipes all
 user data and permanently trips Knox.
+
+## Latest update: v1.0.2
+
+v1.0.2 is an incremental, no-wipe BOOT-only update for an exact HZE1 phone
+that already has the v1.0.1 TWRP+Alpha package. It upgrades the embedded core
+to Magisk Alpha `96221b69-alpha (31000)` while retaining the tested TWRP-
+survival overlay. Installing the 31000 APK alone updates only the manager app;
+it does not replace the core in BOOT.
+
+The v1.0.2 BOOT passed physical-device read-back and a complete Android → TWRP
+→ Android cycle. See [UPDATE_ALPHA_31000.md](UPDATE_ALPHA_31000.md) for the
+scope, exact checksums, and Odin/Heimdall instructions. The complete v1.0.1
+package remains the required base for a fresh installation.
 
 ## Why v1.0.1 exists
 
@@ -86,6 +99,7 @@ revision, or another base firmware.
 See [INSTALL.md](INSTALL.md) for flashing, [POST_INSTALL_ROOT.md](POST_INSTALL_ROOT.md)
 for the banking profile, Integrity Box/PIF order, DenyList, fingerprint fix,
 and YouTube,
+[UPDATE_ALPHA_31000.md](UPDATE_ALPHA_31000.md) for the v1.0.2 BOOT-only update,
 [BUILD_AUDIT.md](BUILD_AUDIT.md) for verification, and
 [CHANGELOG.md](CHANGELOG.md) for changes.
 

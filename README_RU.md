@@ -1,4 +1,4 @@
-# SM-N9750 HZE1: TWRP FBE + Magisk Alpha — v1.0.1
+# SM-N9750 HZE1: TWRP FBE + Magisk Alpha — база v1.0.1 + BOOT v1.0.2
 
 **[Русский](README_RU.md)** · [English](README.md)
 
@@ -9,6 +9,19 @@
 HZE1 комплект заменяет только `BOOT` и `RECOVERY` и не прошивает `USERDATA`.
 Первая разблокировка загрузчика Samsung всё равно стирает данные и необратимо
 сжигает Knox.
+
+## Последнее обновление: v1.0.2
+
+v1.0.2 — добавочное no-wipe обновление только BOOT для точного HZE1 с уже
+установленным комплектом TWRP+Alpha v1.0.1. Оно обновляет встроенный core до
+Magisk Alpha `96221b69-alpha (31000)` и сохраняет проверенное правило защиты
+TWRP. Одна установка APK 31000 обновляет только приложение-manager и не
+заменяет core внутри BOOT.
+
+BOOT v1.0.2 прошёл read-back на физическом телефоне и полный цикл Android →
+TWRP → Android. Совместимость, точные хэши и установка через Odin/Heimdall:
+[UPDATE_ALPHA_31000_RU.md](UPDATE_ALPHA_31000_RU.md). Для новой установки
+по-прежнему сначала нужен полный базовый комплект v1.0.1.
 
 ## Зачем появился v1.0.1
 
@@ -86,8 +99,10 @@ Magisk 30.7. Root, TWRP и Play Integrity работали, но T‑Pay опр�
 
 Полная прошивка: [INSTALL_RU.md](INSTALL_RU.md). Рабочий банковский профиль,
 порядок Integrity Box/PIF, DenyList, исправление отпечатка и YouTube:
-[POST_INSTALL_ROOT_RU.md](POST_INSTALL_ROOT_RU.md). Техническая проверка:
-[BUILD_AUDIT.md](BUILD_AUDIT.md). Изменения: [CHANGELOG_RU.md](CHANGELOG_RU.md).
+[POST_INSTALL_ROOT_RU.md](POST_INSTALL_ROOT_RU.md). BOOT-only v1.0.2:
+[UPDATE_ALPHA_31000_RU.md](UPDATE_ALPHA_31000_RU.md). Техническая проверка:
+[BUILD_AUDIT.md](BUILD_AUDIT.md). Изменения:
+[CHANGELOG_RU.md](CHANGELOG_RU.md).
 
 ## Важная граница обещаний
 
