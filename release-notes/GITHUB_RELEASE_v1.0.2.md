@@ -52,6 +52,13 @@ Read `UPDATE_ALPHA_31000.md` before flashing. Never relock the bootloader while
 custom BOOT or RECOVERY is installed. Do not flash on `SM-N975F`, `SM-N976B`,
 `d2s`, `d2x`, another bootloader revision, or another firmware base.
 
+## Support the project
+
+- Visa T-Bank: `4377 7278 0483 9954`
+- USDT on TON: `UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R`
+
+Verify the `TON` network and the complete address before sending.
+
 ---
 
 # v1.0.2 — добавочное обновление BOOT до Magisk Alpha 31000
@@ -101,3 +108,10 @@ Play Integrity и решения банков зависят от серверо
 Перед прошивкой прочитайте `UPDATE_ALPHA_31000_RU.md`. Не блокируйте загрузчик
 при custom BOOT/RECOVERY. Не прошивайте файлы на `SM-N975F`, `SM-N976B`, `d2s`,
 `d2x`, другую ревизию загрузчика или другую базовую прошивку.
+
+## Поддержать проект
+
+- Visa T-Bank: `4377 7278 0483 9954`
+- USDT в сети TON: `UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R`
+
+Перед отправкой USDT проверьте сеть `TON` и полный адрес.
