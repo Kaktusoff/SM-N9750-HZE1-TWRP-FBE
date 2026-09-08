@@ -53,3 +53,59 @@ Play Integrity и решения банков зависят от серверо
 
 [B]Релиз v1.0.2:[/B]
 https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.2
+
+[SIZE=3][B]English: Magisk Alpha 31000 BOOT-only update — v1.0.2[/B][/SIZE]
+
+Installing the Alpha 31000 APK updates the manager application, but it does
+not replace the core embedded in BOOT. The v1.0.2 BOOT-only image updates the
+core from [CODE]e8a58776-alpha (30700)[/CODE] to
+[CODE]96221b69-alpha (31000)[/CODE] and preserves
+[CODE]overlay.d/twrp-survival.rc[/CODE], which stops Samsung's
+[CODE]vendor_flash_recovery[/CODE] and protects TWRP.
+
+[B]This update is only for an already-unlocked SM-N9750 / d2q on the exact
+N9750ZSU6HZE1 base with the complete v1.0.1 package installed.[/B]
+Only BOOT is flashed, without a wipe. The AP contains no RECOVERY, USERDATA,
+PIT, BL, CP, CSC, or SUPER.
+
+[SPOILER="Verified on the physical phone"]
+[LIST]
+[*]Android completed boot; user 0 unlocked and CE data was readable.
+[*]Magisk: 96221b69-alpha:MAGISK:R / 31000; su ran in u:r:magisk:s0.
+[*]DenyList remained enforced.
+[*]BOOT read-back: 3e0bf40a2e4d64dce1924d37c7e06a1fb3777079d7b1ce027563ad483240f8c4.
+[*]The phone completed Android → TWRP → Android.
+[*]TWRP remained 3.7.1_12-HZE1-FBE-lab-13.
+[*]RECOVERY remained unchanged: d8b050f0d342abde7339a95c5a255098a004399ff1ec78d33b0b151cf2967415.
+[*]vendor_flash_recovery remained stopped after returning to Android.
+[/LIST]
+[/SPOILER]
+
+[SPOILER="Windows / Odin 3.14.4"]
+[LIST=1]
+[*]Verify the download against SHA256SUMS-v1.0.2.txt.
+[*]Enter Download Mode and wait for ID:COM / Added!!.
+[*]Select AP_SM-N9750_HZE1_Magisk-Alpha-31000-BOOT-only_v1.0.2.tar.md5 in AP.
+[*]Leave BL, CP, CSC, and USERDATA empty. Do not enable Re-Partition, Nand Erase All, or Flash Lock, and do not select a PIT. F. Reset Time and Auto Reboot may remain enabled.
+[*]Start, wait for PASS, and let Android boot.
+[*]Open the Alpha manager and confirm core 96221b69-alpha (31000).
+[/LIST]
+[/SPOILER]
+
+[CODE]
+3e0bf40a2e4d64dce1924d37c7e06a1fb3777079d7b1ce027563ad483240f8c4  SM-N9750-HZE1-Magisk-Alpha-31000-BOOT-v1.0.2.img
+28019d0c876fb50944aedac2d27efa5917665d39adb205b35350176537e95469  AP_SM-N9750_HZE1_Magisk-Alpha-31000-BOOT-only_v1.0.2.tar.md5
+f77216f829cd0185f58e4b87526544891cca562b8e71a7730856871c24265300  Magisk-Alpha-96221b69-31000.apk
+7886b7a4cedae68daf03cddcec4e6f4d8cb71f9d3cb97a9ff6470f1b59a4cbfa  INSTALL_UPDATE_RU_EN.txt
+[/CODE]
+
+[B]Attached: the BOOT-only AP for Odin, the exact Alpha 31000 APK, the RU/EN
+instructions, and SHA256SUMS-v1.0.2.txt. The raw BOOT image is also available
+in the GitHub v1.0.2 release.[/B]
+
+Play Integrity and banking-app decisions are server-side and were not
+separately re-tested after this core update. The v1.0.1 banking-profile result
+is not a permanent guarantee for v1.0.2.
+
+[B]v1.0.2 release:[/B]
+https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.2
