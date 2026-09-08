@@ -1,24 +1,70 @@
-[SIZE=4][B]SM-N9750 HZE1: TWRP FBE + Magisk Alpha — v1.0.1[/B][/SIZE]
+[SIZE=4][B]SM-N9750 HZE1: TWRP FBE + Magisk Alpha — база v1.0.1 + BOOT v1.0.2[/B][/SIZE]
 
 [B]Устройство:[/B] Samsung Galaxy Note10+ Snapdragon, SM-N9750 / d2q
 [B]Обязательная база:[/B] N9750ZSU6HZE1, Android 12
-[B]Статус:[/B] BOOT и RECOVERY проверены на физическом телефоне
+[B]Статус:[/B] базовый комплект и BOOT v1.0.2 проверены на физическом телефоне
 
 [B]Это не custom ROM.[/B] One UI остаётся стоковой, заменяются только BOOT и
-RECOVERY. Существующая публикация v1.0.1 полностью заменена на месте; новый
-релиз не создавался. v1.0.0 снят с публикации.
+RECOVERY. /vendor не изменяется.
 
-[SPOILER="Главное изменение и почему"]
-В старом комплекте официальный Magisk 30.7 давал рабочий root и зелёный Play
-Integrity, но T‑Pay всё равно видел модифицированную среду и писал «недоступен
-на этом телефоне». На том же аппарате T‑Pay заработал после перехода на Magisk
-Alpha [CODE]e8a58776-alpha (30700)[/CODE]; после этого карта была успешно
-добавлена.
+[SPOILER="BOOT v1.0.2 — Magisk Alpha 31000"]
+Установка APK Alpha 31000 обновляет приложение-manager, но не меняет core,
+встроенный в раздел BOOT. BOOT-only v1.0.2 обновляет core с
+[CODE]e8a58776-alpha (30700)[/CODE] до
+[CODE]96221b69-alpha (31000)[/CODE] и сохраняет правило
+[CODE]overlay.d/twrp-survival.rc[/CODE], которое останавливает Samsung
+[CODE]vendor_flash_recovery[/CODE] и защищает TWRP.
 
-Повторный Alpha-патч BOOT удалил наше правило сохранения TWRP. В v1.0.1 оба
-изменения объединены: рабочий Alpha normal boot +
+[B]Обновление предназначено только для уже разблокированного SM-N9750 / d2q
+на точной базе N9750ZSU6HZE1 с установленным комплектом v1.0.1.[/B]
+Прошивается только BOOT, без wipe. В AP нет RECOVERY, USERDATA, PIT, BL, CP,
+CSC или SUPER.
+
+[B]Проверено на телефоне:[/B]
+[LIST]
+[*]Android загрузился, пользователь 0 разблокирован, CE-данные читаются.
+[*]Magisk: 96221b69-alpha:MAGISK:R / 31000; su работает в u:r:magisk:s0.
+[*]DenyList включён.
+[*]Read-back BOOT: 3e0bf40a2e4d64dce1924d37c7e06a1fb3777079d7b1ce027563ad483240f8c4.
+[*]Пройден цикл Android → TWRP → Android.
+[*]TWRP сохранился: 3.7.1_12-HZE1-FBE-lab-13.
+[*]RECOVERY не изменился: d8b050f0d342abde7339a95c5a255098a004399ff1ec78d33b0b151cf2967415.
+[*]После возврата в Android vendor_flash_recovery остановлен.
+[/LIST]
+
+[B]Windows / Odin 3.14.4:[/B]
+[LIST=1]
+[*]Сверить SHA-256 по SHA256SUMS-v1.0.2.txt.
+[*]В Download Mode дождаться ID:COM / Added!!.
+[*]В поле AP выбрать AP_SM-N9750_HZE1_Magisk-Alpha-31000-BOOT-only_v1.0.2.tar.md5.
+[*]BL, CP, CSC и USERDATA оставить пустыми. Не включать Re-Partition, Nand Erase All и Flash Lock, не выбирать PIT. F. Reset Time и Auto Reboot можно оставить.
+[*]Нажать Start, дождаться PASS и загрузки Android.
+[*]Открыть manager Alpha и проверить core 96221b69-alpha (31000).
+[/LIST]
+
+[CODE]
+3e0bf40a2e4d64dce1924d37c7e06a1fb3777079d7b1ce027563ad483240f8c4  SM-N9750-HZE1-Magisk-Alpha-31000-BOOT-v1.0.2.img
+28019d0c876fb50944aedac2d27efa5917665d39adb205b35350176537e95469  AP_SM-N9750_HZE1_Magisk-Alpha-31000-BOOT-only_v1.0.2.tar.md5
+f77216f829cd0185f58e4b87526544891cca562b8e71a7730856871c24265300  Magisk-Alpha-96221b69-31000.apk
+7886b7a4cedae68daf03cddcec4e6f4d8cb71f9d3cb97a9ff6470f1b59a4cbfa  INSTALL_UPDATE_RU_EN.txt
+[/CODE]
+
+[B]К сообщению приложены BOOT-only AP для Odin, точный APK Alpha 31000,
+RU/EN-инструкция и SHA256SUMS-v1.0.2.txt. Raw BOOT также находится в релизе
+GitHub v1.0.2.[/B]
+
+Play Integrity и решения банков зависят от серверов и отдельно после
+обновления core не проверялись. Результаты банковского профиля v1.0.1 не
+являются бессрочной гарантией для v1.0.2.
+[/SPOILER]
+
+[SPOILER="Базовый комплект v1.0.1"]
+BOOT объединяет рабочий Magisk Alpha normal boot
+[CODE]e8a58776-alpha (30700)[/CODE] и
 [CODE]overlay.d/twrp-survival.rc[/CODE], который на early-init останавливает
-Samsung [CODE]vendor_flash_recovery[/CODE]. /vendor не изменяется.
+Samsung [CODE]vendor_flash_recovery[/CODE] и сохраняет TWRP. На эталонном
+телефоне с этой конфигурацией T‑Pay стал доступен и карта была успешно
+добавлена.
 [/SPOILER]
 
 [SPOILER="Что проверено"]
@@ -27,7 +73,7 @@ Samsung [CODE]vendor_flash_recovery[/CODE]. /vendor не изменяется.
 [*]TWRP 3.7.1_12-HZE1-FBE-lab-13.
 [*]Расшифровка /data штатным PIN/паролем Android.
 [*]SID-проверенный synthetic-password / Gatekeeper / Keymaster flow для CE-ключа пользователя 0.
-[*]Полный цикл Android → TWRP → Android после нового Alpha-BOOT.
+[*]Полный цикл Android → TWRP → Android с Alpha-BOOT.
 [*]TWRP не заменяется стоковым recovery.
 [*]Read-back BOOT: 027447589dc1845d65d6018df5322d54b01410e939a441e0fdcf63ae9c12a8c5.
 [*]Read-back RECOVERY: d8b050f0d342abde7339a95c5a255098a004399ff1ec78d33b0b151cf2967415.
@@ -88,12 +134,13 @@ Default bank-first профиль эталонного телефона:
 нейтральное случайное имя/пакет, которое не публикуется. Enforce DenyList
 остаётся включённым.
 
-Если уже стоял прежний v1.0.1, сначала установите/откройте Alpha из полного
-архива релиза и подтвердите рабочий root, затем удалите [B]только[/B] старый
+Если на телефоне установлен официальный manager Magisk 30.7, сначала
+установите/откройте Alpha из полного архива релиза и подтвердите рабочий root,
+затем удалите [B]только[/B]
 официальный manager командой [CODE]adb uninstall com.topjohnwu.magisk[/CODE].
 Если он был скрыт под случайным пакетом, сначала восстановите имя приложения
-либо удалите именно старое приложение через его карточку Android. Не выбирайте
-полное удаление Magisk: оно удалит root, а не только устаревший manager. Для
+либо удалите именно это приложение через его карточку Android. Не выбирайте
+полное удаление Magisk: оно удалит root, а не только manager. Для
 ADB-команды нужны актуальные Platform Tools, временная USB-отладка и
 подтверждённый RSA-ключ компьютера.
 
@@ -115,12 +162,12 @@ keybox, а не только экран завершения. Общий keybox,
 
 PIF v18 нужно ставить прямо поверх Integrity Box, не удаляя Integrity Box
 отдельно: его uninstaller удаляет keybox/targets Tricky Store. Этот PIF также
-может унаследовать старый [CODE]uninstall.sh[/CODE], поэтому до перезагрузки его
-нужно удалить только после проверки двух сигнатур по команде из
+может унаследовать [CODE]uninstall.sh[/CODE] из заменяемого модуля, поэтому до
+перезагрузки его нужно удалить только после проверки двух сигнатур по команде из
 POST_INSTALL_ROOT_RU.md. Там же дан root-only backup итоговой конфигурации.
 
-Официальный публичный Tricky Store v1.4.1 на дату публикации — build 245. Build
-248 закрыт и проект его не перепубликует. Все ссылки, точный порядок, targets,
+Для Tricky Store v1.4.1 официальный публичный build — 245. Build 248 закрыт и
+недоступен из официальных источников. Все ссылки, точный порядок, targets,
 DenyList и случай с VPN Hotspot / Root is missing описаны в
 POST_INSTALL_ROOT_RU.md.
 
@@ -157,15 +204,11 @@ io.github.vvb2060.keyattestation!
 [B]GitHub, полный архив, исходные патчи, инструкции RU/EN и changelog:[/B]
 https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE
 
-[B]Единственный актуальный релиз:[/B]
+[B]Актуальное обновление BOOT v1.0.2:[/B]
+https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.2
+
+[B]Полный базовый комплект v1.0.1:[/B]
 https://github.com/Kaktusoff/SM-N9750-HZE1-TWRP-FBE/releases/tag/v1.0.1
 
 [B][COLOR=red]Нельзя прошивать на SM-N975F, SM-N976B, d2s, d2x, другую
 ревизию загрузчика или другую базовую прошивку.[/COLOR][/B]
-
-[SPOILER="Поддержать проект"]
-[B]Visa T-Bank:[/B] 4377 7278 0483 9954
-[B]USDT в сети TON:[/B] UQAT_xqILzlNaVgnkqqpHC2v5MouL6jdhZArOAmE6TeJjo3R
-
-Перед отправкой USDT проверьте сеть TON и адрес целиком.
-[/SPOILER]
